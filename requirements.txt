@@ -1,0 +1,8 @@
+numpy
+opencv-python
+Pillow
+matplotlib
+PySide6
+reportlab
+pypdf
+pyinstaller
