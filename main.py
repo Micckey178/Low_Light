@@ -56,6 +56,7 @@ from PySide6.QtCore import Qt, QTimer
 from core.enhancement import ALGORITHMS, apply_enhancement
 from core.performance import benchmark_algorithm
 from core.report_generator import generate_ieee_report
+from core.adaptive_engine import build_processing_plan, ENGINE_VERSION as ACP_ENGINE_VERSION
 
 
 # =========================================================
@@ -641,6 +642,7 @@ class ATHERApp(QMainWindow):
         self.benchmark_results = []
         self.last_report_path = None
         self.default_gamma = 0.6
+        self.acp_plan = None
 
         self.navigation_buttons = {}
         self.page_indices = {}
@@ -766,6 +768,7 @@ class ATHERApp(QMainWindow):
             ("Image Workspace", "workspace"),
             ("Enhancement Lab", "enhancement"),
             ("Image Analysis", "analysis"),
+            ("Adaptive Processing (ACP)", "acp"),
             ("Algorithm Lab", "algorithms"),
             ("Benchmark Lab", "benchmark"),
             ("Research Reports", "reports"),
@@ -856,6 +859,7 @@ class ATHERApp(QMainWindow):
         self.build_workspace()
         self.build_enhancement_lab()
         self.build_analysis()
+        self.build_acp_page()
         self.build_algorithm_lab()
         self.build_benchmark_lab()
         self.build_reports_page()
@@ -874,6 +878,7 @@ class ATHERApp(QMainWindow):
             "workspace": "Image Workspace",
             "enhancement": "Enhancement Lab",
             "analysis": "Image Analysis",
+            "acp": "Adaptive Processing (ACP)",
             "algorithms": "Algorithm Lab",
             "benchmark": "Benchmark Lab",
             "reports": "Research Reports",
@@ -1042,6 +1047,13 @@ class ATHERApp(QMainWindow):
         input_row.addWidget(self.dashboard_upload_button)
         input_row.addWidget(self.dashboard_camera_button)
         input_row.addWidget(self.dashboard_capture_button)
+
+        self.dashboard_acp_button = QPushButton("Open ACP Analysis")
+        self.dashboard_acp_button.setObjectName("secondaryButton")
+        self.dashboard_acp_button.clicked.connect(
+            lambda: self.navigate("acp")
+        )
+        input_row.addWidget(self.dashboard_acp_button)
         input_row.addStretch()
         input_row.addWidget(self.dashboard_save_button)
 
@@ -1628,6 +1640,326 @@ class ATHERApp(QMainWindow):
 
         layout.addStretch()
         self.add_page("analysis", page)
+
+    # =====================================================
+    # ATHER-ACP: ADAPTIVE CLASSICAL PROCESSING
+    # =====================================================
+
+    def build_acp_page(self):
+        page, layout = self.create_page(
+            "ATHER-ACP Adaptive Processing",
+            "A deterministic, explainable analysis of the currently loaded "
+            "photograph. ACP measures image conditions and recommends "
+            "classical algorithms; it never enhances an image automatically."
+        )
+
+        intro = QLabel(
+            "Every uploaded or webcam-captured image is analysed independently. "
+            "No fixed test photograph, AI model, training data or cloud service "
+            "is used. Recommendations are rule-based candidates, not guarantees "
+            "of perceptual quality."
+        )
+        intro.setWordWrap(True)
+        intro.setObjectName("muted")
+        layout.addWidget(intro)
+
+        action_row = QHBoxLayout()
+        self.acp_analyse_button = QPushButton("Re-analyse Current Image")
+        self.acp_analyse_button.clicked.connect(self.run_acp_analysis)
+        action_row.addWidget(self.acp_analyse_button)
+
+        self.acp_open_method_button = QPushButton(
+            "Open Selected Recommendation in Enhancement Lab"
+        )
+        self.acp_open_method_button.setObjectName("secondaryButton")
+        self.acp_open_method_button.clicked.connect(
+            self.open_selected_acp_recommendation
+        )
+        self.acp_open_method_button.setEnabled(False)
+        action_row.addWidget(self.acp_open_method_button)
+        action_row.addStretch()
+        layout.addLayout(action_row)
+
+        self.acp_status_label = QLabel(
+            "Waiting for an image. Upload or capture a photograph first."
+        )
+        self.acp_status_label.setWordWrap(True)
+        self.acp_status_label.setStyleSheet(
+            "color: #B69AF4; font-weight: 700; padding: 5px 0;"
+        )
+        layout.addWidget(self.acp_status_label)
+
+        metrics_group = QGroupBox("Measured Image Conditions")
+        metrics_layout = QVBoxLayout(metrics_group)
+        metrics_note = QLabel(
+            "Values below are computed from the current original image. "
+            "Noise is an approximate residual proxy, not a ground-truth estimate."
+        )
+        metrics_note.setWordWrap(True)
+        metrics_note.setObjectName("muted")
+        metrics_layout.addWidget(metrics_note)
+
+        self.acp_metrics_table = QTableWidget(10, 2)
+        self.acp_metrics_table.setHorizontalHeaderLabels([
+            "Measurement", "Current Image"
+        ])
+        self.acp_metrics_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.acp_metrics_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.acp_metrics_table.verticalHeader().setVisible(False)
+        self.acp_metrics_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.acp_metrics_table.setAlternatingRowColors(True)
+        self.acp_metrics_table.setMinimumHeight(340)
+        self.acp_metric_names = [
+            "Image dimensions", "Total pixels", "Color mode",
+            "Mean luminance (0–255)", "Median luminance (0–255)",
+            "Luminance contrast (standard deviation)",
+            "Dynamic range", "Dark pixels (≤ 51)",
+            "Shadow / highlight clipping", "Estimated noise proxy"
+        ]
+        for row, name in enumerate(self.acp_metric_names):
+            self.acp_metrics_table.setItem(row, 0, QTableWidgetItem(name))
+            self.acp_metrics_table.setItem(row, 1, QTableWidgetItem("Waiting"))
+        metrics_layout.addWidget(self.acp_metrics_table)
+        layout.addWidget(metrics_group)
+
+        conditions_group = QGroupBox("Detected Conditions and Rule Explanations")
+        conditions_layout = QVBoxLayout(conditions_group)
+        self.acp_conditions_text = QPlainTextEdit()
+        self.acp_conditions_text.setReadOnly(True)
+        self.acp_conditions_text.setMinimumHeight(170)
+        self.acp_conditions_text.setPlaceholderText(
+            "Detected conditions will appear after image analysis."
+        )
+        conditions_layout.addWidget(self.acp_conditions_text)
+        layout.addWidget(conditions_group)
+
+        recommendations_group = QGroupBox(
+            "Recommended Classical Algorithms"
+        )
+        recommendations_layout = QVBoxLayout(recommendations_group)
+        recommendation_note = QLabel(
+            "Priority is a deterministic rule score, not a probability, "
+            "accuracy percentage or quality ranking. Double-click a row or "
+            "select it and open it in the Enhancement Lab."
+        )
+        recommendation_note.setWordWrap(True)
+        recommendation_note.setObjectName("muted")
+        recommendations_layout.addWidget(recommendation_note)
+
+        self.acp_recommendations_table = QTableWidget(0, 3)
+        self.acp_recommendations_table.setHorizontalHeaderLabels([
+            "Algorithm", "Rule Priority", "Why it was suggested"
+        ])
+        self.acp_recommendations_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.acp_recommendations_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.acp_recommendations_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.acp_recommendations_table.verticalHeader().setVisible(False)
+        self.acp_recommendations_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.acp_recommendations_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.acp_recommendations_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        self.acp_recommendations_table.setWordWrap(True)
+        self.acp_recommendations_table.setMinimumHeight(230)
+        self.acp_recommendations_table.itemSelectionChanged.connect(
+            self.update_acp_recommendation_button
+        )
+        self.acp_recommendations_table.itemDoubleClicked.connect(
+            lambda item: self.open_selected_acp_recommendation()
+        )
+        recommendations_layout.addWidget(self.acp_recommendations_table)
+        layout.addWidget(recommendations_group)
+
+        cautions_group = QGroupBox("Processing Cautions")
+        cautions_layout = QVBoxLayout(cautions_group)
+        self.acp_cautions_text = QPlainTextEdit()
+        self.acp_cautions_text.setReadOnly(True)
+        self.acp_cautions_text.setMinimumHeight(110)
+        cautions_layout.addWidget(self.acp_cautions_text)
+        layout.addWidget(cautions_group)
+
+        explanation_group = QGroupBox("Complete ACP Explanation")
+        explanation_layout = QVBoxLayout(explanation_group)
+        self.acp_explanation_text = QPlainTextEdit()
+        self.acp_explanation_text.setReadOnly(True)
+        self.acp_explanation_text.setMinimumHeight(210)
+        explanation_layout.addWidget(self.acp_explanation_text)
+        layout.addWidget(explanation_group)
+
+        layout.addStretch()
+        self.add_page("acp", page)
+
+    def run_acp_analysis(self):
+        """Analyse the current original image using deterministic ACP rules."""
+        if self.original_image is None:
+            self.acp_status_label.setText(
+                "No image loaded. Upload or capture a photograph to begin."
+            )
+            QMessageBox.information(
+                self, "ATHER-ACP", 
+                "Upload or capture an image before running ACP analysis."
+            )
+            return
+
+        self.acp_analyse_button.setEnabled(False)
+        self.acp_status_label.setText(
+            f"ATHER-ACP v{ACP_ENGINE_VERSION}: analysing current image..."
+        )
+        QApplication.processEvents()
+
+        try:
+            # Always analyse a fresh copy of the current original image.
+            plan = build_processing_plan(self.original_image.copy())
+            analysis = plan["analysis"]
+            luminance = analysis["luminance"]
+            image_info = analysis["image"]
+            classification = plan["classification"]
+            noise = analysis["noise"]
+
+            dark_percent = 100.0 * luminance["dark_pixel_fraction_le_51"]
+            black_percent = 100.0 * luminance["black_clipping_fraction_le_5"]
+            highlight_percent = 100.0 * luminance["highlight_clipping_fraction_ge_250"]
+
+            values = [
+                f"{image_info['width']} × {image_info['height']}",
+                f"{image_info['total_pixels']:,}",
+                image_info["color_mode"],
+                f"{luminance['mean']:.2f}",
+                f"{luminance['median']:.2f}",
+                f"{luminance['standard_deviation']:.2f}",
+                f"{luminance['dynamic_range']} / 255",
+                f"{dark_percent:.2f}%",
+                f"{black_percent:.2f}% shadow / {highlight_percent:.2f}% highlight",
+                f"{noise['noise_estimate_proxy']:.2f} / 255 (approx.)"
+            ]
+            for row, value in enumerate(values):
+                self.acp_metrics_table.setItem(row, 1, QTableWidgetItem(value))
+
+            active = classification.get("active_conditions", [])
+            if active:
+                condition_lines = []
+                explanations = classification.get("explanations", {})
+                for condition in active:
+                    condition_lines.append(
+                        f"• {condition.replace('_', ' ').title()}\n"
+                        f"  {explanations.get(condition, 'No explanation available.')}"
+                    )
+                self.acp_conditions_text.setPlainText("\n\n".join(condition_lines))
+            else:
+                self.acp_conditions_text.setPlainText(
+                    "No configured condition threshold was crossed. "
+                    "This does not mean the photograph is perfect; it means "
+                    "the current ACP rules did not identify a strong condition."
+                )
+
+            recommendations = plan.get("recommendations", [])
+            self.acp_recommendations_table.setRowCount(len(recommendations))
+            for row, recommendation in enumerate(recommendations):
+                name_item = QTableWidgetItem(
+                    recommendation.get("algorithm_name", "Unknown algorithm")
+                )
+                name_item.setData(
+                    Qt.ItemDataRole.UserRole,
+                    recommendation.get("algorithm_key")
+                )
+                priority_item = QTableWidgetItem(
+                    f"{recommendation.get('priority_score', 0)}/100"
+                )
+                reasons = recommendation.get("reasons", [])
+                reason_item = QTableWidgetItem("\n".join(reasons))
+                for item in (name_item, priority_item, reason_item):
+                    item.setToolTip(item.text())
+                self.acp_recommendations_table.setItem(row, 0, name_item)
+                self.acp_recommendations_table.setItem(row, 1, priority_item)
+                self.acp_recommendations_table.setItem(row, 2, reason_item)
+
+            if not recommendations:
+                self.acp_recommendations_table.setRowCount(1)
+                self.acp_recommendations_table.setItem(
+                    0, 0, QTableWidgetItem("No recommendation")
+                )
+                self.acp_recommendations_table.setItem(
+                    0, 1, QTableWidgetItem("—")
+                )
+                self.acp_recommendations_table.setItem(
+                    0, 2, QTableWidgetItem(
+                        "ACP has withheld recommendations for this image profile. "
+                        "You can still manually test any registered algorithm."
+                    )
+                )
+
+            self.acp_cautions_text.setPlainText(
+                "\n\n".join(plan.get("cautions", []))
+            )
+            self.acp_explanation_text.setPlainText(
+                plan.get("explanation", "No explanation was generated.")
+            )
+
+            self.acp_plan = plan
+            intent = classification.get(
+                "exposure_interpretation", "not_assessed"
+            ).replace("_", " ").title()
+            self.acp_status_label.setText(
+                f"Analysis complete • ATHER-ACP v{ACP_ENGINE_VERSION} • "
+                f"{intent} • {len(recommendations)} recommendation(s)"
+            )
+            self.update_acp_recommendation_button()
+
+        except Exception as error:
+            self.acp_plan = None
+            self.acp_status_label.setText(
+                "ACP analysis failed. The existing enhancement workflow remains available."
+            )
+            self.acp_conditions_text.setPlainText(str(error))
+            self.acp_recommendations_table.setRowCount(0)
+            self.acp_cautions_text.clear()
+            self.acp_explanation_text.clear()
+            self.acp_open_method_button.setEnabled(False)
+        finally:
+            self.acp_analyse_button.setEnabled(True)
+
+    def update_acp_recommendation_button(self):
+        row = self.acp_recommendations_table.currentRow()
+        valid = False
+        if row >= 0:
+            item = self.acp_recommendations_table.item(row, 0)
+            valid = bool(
+                item and item.data(Qt.ItemDataRole.UserRole) in ALGORITHMS
+            )
+        self.acp_open_method_button.setEnabled(valid)
+
+    def open_selected_acp_recommendation(self):
+        row = self.acp_recommendations_table.currentRow()
+        if row < 0:
+            return
+        item = self.acp_recommendations_table.item(row, 0)
+        key = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if key not in ALGORITHMS:
+            return
+
+        index = self.algorithm_combo.findData(key)
+        if index >= 0:
+            self.algorithm_combo.setCurrentIndex(index)
+        dashboard_index = self.dashboard_algorithm_combo.findData(key)
+        if dashboard_index >= 0:
+            self.dashboard_algorithm_combo.setCurrentIndex(dashboard_index)
+        self.navigate("enhancement")
 
     # =====================================================
     # ALGORITHM LAB - SEPARATE SIDEBAR SECTION
@@ -2522,6 +2854,9 @@ class ATHERApp(QMainWindow):
         )
 
         self.status_label_update("Image loaded successfully")
+
+        # A new upload or webcam capture always receives its own fresh ACP plan.
+        self.run_acp_analysis()
 
         self.dashboard_capture_button.setEnabled(
             self.camera is not None
