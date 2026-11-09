@@ -22,7 +22,7 @@ import numpy as np
 
 
 ENGINE_NAME = "ATHER-ACP"
-ENGINE_VERSION = "0.2.0"
+ENGINE_VERSION = "0.3.0"
 
 # These are initial engineering thresholds, not universal perceptual
 # standards. They must be calibrated against a documented image dataset.
@@ -341,6 +341,17 @@ def classify_image_conditions(
         "mixed_lighting": bool(mixed_lighting),
     }
 
+    # Compound profiles describe co-occurring measurements. They do not
+    # introduce a learned class or infer the photographer's intent.
+    compound_rules = {
+        "dark_with_uneven_illumination": conditions["very_dark"] and conditions["uneven_illumination"],
+        "dark_with_elevated_noise": conditions["very_dark"] and conditions["high_noise_proxy"],
+        "global_and_local_contrast_weak": conditions["low_global_contrast"] and conditions["weak_local_contrast"],
+        "uneven_mixed_lighting": conditions["uneven_illumination"] and conditions["mixed_lighting"],
+        "noise_with_weak_local_contrast": conditions["high_noise_proxy"] and conditions["weak_local_contrast"],
+    }
+    conditions.update({name: bool(enabled) for name, enabled in compound_rules.items()})
+
     explanations = {
         "very_dark": (
             f"Dark-dominant tonal distribution: mean {mean:.2f}/255, "
@@ -377,6 +388,27 @@ def classify_image_conditions(
             f"and very bright areas ({bright_fraction * 100:.1f}%). Global remapping may "
             "damage one of these regions."
         ),
+        "dark_with_uneven_illumination": (
+            "Combined profile: the image is dark-dominant and its low-frequency "
+            "illumination varies spatially. Compare illumination-aware methods "
+            "against conservative tonal mapping."
+        ),
+        "dark_with_elevated_noise": (
+            "Combined profile: dark tonal levels coincide with an elevated residual "
+            "noise proxy. Brightening may make noise more visible; use mild settings."
+        ),
+        "global_and_local_contrast_weak": (
+            "Combined profile: both whole-image luminance spread and average tile "
+            "contrast are limited. Compare global and local contrast methods."
+        ),
+        "uneven_mixed_lighting": (
+            "Combined profile: illumination varies spatially while dark and bright "
+            "regions coexist. Avoid assuming one global correction will suit all regions."
+        ),
+        "noise_with_weak_local_contrast": (
+            "Combined profile: local contrast is weak while the residual noise proxy "
+            "is elevated. Aggressive local enhancement may amplify texture and noise."
+        ),
     }
 
     active = [name for name, enabled in conditions.items() if enabled]
@@ -392,6 +424,7 @@ def classify_image_conditions(
     return {
         "conditions": conditions,
         "active_conditions": active,
+        "compound_conditions": [name for name, enabled in compound_rules.items() if enabled],
         "explanations": {name: explanations[name] for name in active},
         "exposure_interpretation": exposure_interpretation,
         "exposure_intent_note": (
@@ -420,10 +453,12 @@ def recommend_algorithms(
         "lime", "homomorphic"
     )}
     reasons = {key: [] for key in scores}
+    score_breakdown = {key: [] for key in scores}
 
     def add(key: str, points: int, reason: str) -> None:
         scores[key] += points
         reasons[key].append(reason)
+        score_breakdown[key].append({"points": int(points), "rule": reason})
 
     bright_scene = "bright_dominant_scene" in active
     mixed_scene = "mixed_lighting" in active
@@ -459,6 +494,39 @@ def recommend_algorithms(
         for key in ("gamma", "adaptive_gamma", "lime", "histogram_equalization", "contrast_stretching"):
             add(key, -22, "Clipped highlights require conservative processing and visual inspection.")
 
+    # Compound-profile adjustments reward methods that address the measured
+    # combination while retaining the existing penalties for noise/clipping.
+    compounds = set(classified.get("compound_conditions", []))
+    if "dark_with_uneven_illumination" in compounds:
+        add("msr", 12, "Combined dark + uneven-illumination profile: a multi-scale illumination/reflectance method is a stronger comparison candidate.")
+        add("lime", 8, "Combined dark + uneven-illumination profile: compare illumination compensation, while checking noise and highlights.")
+        add("gamma", -8, "Spatially uneven lighting means one global gamma curve may not improve all regions equally.")
+    if "dark_with_elevated_noise" in compounds:
+        add("gamma", -6, "Dark + elevated noise-proxy profile: keep global brightening conservative to limit visible noise amplification.")
+        add("adaptive_gamma", -6, "Dark + elevated noise-proxy profile: use a mild adaptive setting and inspect flat regions.")
+    if "global_and_local_contrast_weak" in compounds:
+        add("clahe", 8, "Both global and tile-level contrast measurements are weak; CLAHE is worth a controlled local-contrast comparison.")
+        add("contrast_stretching", 5, "Both global and local contrast measurements are weak; include a conservative global baseline.")
+    if "uneven_mixed_lighting" in compounds:
+        add("msr", 8, "Uneven illumination plus mixed dark/bright regions favors testing spatially adaptive reflectance methods.")
+        add("ssr", 5, "Uneven illumination plus mixed regions supports a cautious single-scale Retinex comparison.")
+    if "noise_with_weak_local_contrast" in compounds:
+        add("clahe", -8, "Weak local contrast with elevated noise proxy: reduce local amplification strength and inspect noise carefully.")
+
+    # Parameter notes are conservative starting points for manual experiments.
+    # They never invoke or alter the enhancement implementation.
+    parameter_guidance = {
+        "gamma": "Starting point: gamma 0.60 (existing ATHER default); compare nearby mild values such as 0.55 and 0.70.",
+        "adaptive_gamma": "Starting point: use the current ATHER adaptive-gamma defaults; compare a conservative setting before increasing strength.",
+        "contrast_stretching": "Starting point: use a narrow percentile trim (about 1st–99th percentile) only if the implementation exposes percentile limits.",
+        "histogram_equalization": "Starting point: prefer luminance-channel equalization when the implementation supports it; compare against the original to check for tonal shifts.",
+        "clahe": "Starting point: clip limit around 2.0 with an 8×8 tile grid, if those controls are exposed; lower the clip limit if noise becomes prominent.",
+        "ssr": "Starting point: retain the implementation's default Gaussian scale first; compare one smaller and one larger scale rather than making a large jump.",
+        "msr": "Starting point: retain the implementation's default scale set and gains first; change one scale-related control at a time.",
+        "lime": "Starting point: retain the implementation's default illumination-map settings; avoid stronger enhancement when the noise proxy is elevated.",
+        "homomorphic": "Starting point: retain the implementation's defaults and use mild frequency-gain settings if exposed; inspect halos and colour shifts.",
+    }
+
     # Do not manufacture recommendations for a bright, low-contrast image
     # merely because its standard deviation is small (e.g. snow/fog scenes).
     # Such images may still be enhanced manually, but ACP should not imply need.
@@ -481,12 +549,19 @@ def recommend_algorithms(
     for key in ranked:
         if scores[key] <= 0:
             continue
+        guidance = parameter_guidance[key]
+        visible_reasons = list(reasons[key])
+        visible_reasons.append("Parameter starting point (manual trial only): " + guidance)
         output.append({
             "algorithm_key": key,
             "algorithm_name": names[key],
             "priority_score": int(min(100, scores[key])),
+            "raw_rule_score": int(scores[key]),
             "score_type": "heuristic_rule_priority_not_probability",
-            "reasons": reasons[key],
+            "score_breakdown": score_breakdown[key],
+            "reasons": visible_reasons,
+            "parameter_guidance": guidance,
+            "parameter_guidance_status": "manual_starting_point_not_automatically_applied",
         })
         if len(output) >= max_recommendations:
             break
@@ -516,12 +591,25 @@ def generate_explanation(
         "Detected conditions:"
     ]
 
-    if classified["active_conditions"]:
-        for name in classified["active_conditions"]:
+    compound_names = set(classified.get("compound_conditions", []))
+    basic_conditions = [
+        name for name in classified["active_conditions"]
+        if name not in compound_names
+    ]
+    if basic_conditions:
+        for name in basic_conditions:
             lines.append(f"- {name.replace('_', ' ').title()}: "
                          f"{classified['explanations'][name]}")
     else:
         lines.append("- No configured condition threshold was crossed.")
+
+    compounds = classified.get("compound_conditions", [])
+    lines.extend(["", "Combined-condition analysis:"])
+    if compounds:
+        for name in compounds:
+            lines.append(f"- {name.replace('_', ' ').title()}: {classified['explanations'][name]}")
+    else:
+        lines.append("- No configured compound-condition rule was triggered.")
 
     lines.extend(["", "Recommended candidates (not automatically executed):"])
     if recs:
@@ -531,7 +619,7 @@ def generate_explanation(
                 f"(priority {item['priority_score']}/100)"
             )
             for reason in item["reasons"]:
-                lines.append(f"  Reason: {reason}")
+                lines.append(f"  Reason / guidance: {reason}")
     else:
         lines.append("- No algorithm recommendation was produced.")
 
@@ -571,6 +659,11 @@ def build_processing_plan(
         cautions.append(
             "Both dark and bright regions are present. Global brightness or contrast changes "
             "may improve one region while damaging another. Compare local methods carefully."
+        )
+    if "dark_with_elevated_noise" in active:
+        cautions.append(
+            "Darkness and an elevated noise proxy occur together. Treat every suggested "
+            "parameter as a mild starting point; inspect noise before accepting an output."
         )
     if "high_noise_proxy" in active:
         cautions.append(
