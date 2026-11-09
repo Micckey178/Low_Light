@@ -1,42 +1,55 @@
 """
-ATHER - Two-Page IEEE-Style Performance Report
-------------------------------------------------
-PDF generation using ReportLab only (no LaTeX).
+ATHER - Continuous IEEE-Style Performance Report Generator
+-----------------------------------------------------------
+Classical, non-AI image enhancement research report.
 
-Format (matches the earlier ATHER report):
-- Full-width title, author lines and abstract, then two-column body
-- Sections I-XI, subsections A-D, formula lines, TABLE I with caption
-- Photos stacked one below the other, graphs stacked one below the other
-- ONE text size for the whole report (identical on both pages)
-- Content flows continuously column -> column -> page, so no blank gaps
-- Exactly two A4 pages: only the image scale is adjusted to fit
-
-main.py signature preserved:
-  generate_ieee_report(results, output_path, image_name, gamma_value,
-                       original_image_path, enhanced_image_paths,
-                       algorithm_parameters, system_info)
+Features:
+- Supports one or more of the nine registered algorithms.
+- Continuous IEEE-style two-column layout.
+- Automatically creates as many pages as required.
+- Full-width title and abstract on the first page.
+- Consistent typography and column alignment.
+- Keeps headings with following content.
+- Keeps images with their captions.
+- Preserves image aspect ratios.
+- Repeating table headers when tables split.
+- No forced two-page compression.
+- No fabricated benchmark measurements.
 """
 
 from pathlib import Path
 from io import BytesIO
+import html
+import os
 import platform
-import sys
+import tempfile
 
 import numpy as np
-
 from PIL import Image as PILImage
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
 from reportlab.lib import colors
+
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.fonts import addMapping
+
 from reportlab.platypus import (
-    BaseDocTemplate, PageTemplate, Frame, Paragraph, Table, TableStyle,
-    Image, KeepTogether, HRFlowable, NextPageTemplate,
+    BaseDocTemplate,
+    PageTemplate,
+    Frame,
+    Paragraph,
+    Table,
+    TableStyle,
+    Image,
+    KeepTogether,
+    HRFlowable,
+    NextPageTemplate,
+    Spacer,
 )
+
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 
@@ -45,105 +58,229 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 
 
 # =========================================================
-# CONFIGURATION
+# PAGE CONFIGURATION
 # =========================================================
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
 
-LEFT = 0.6 * inch
-RIGHT = 0.6 * inch
-TOP = 0.5 * inch
-BOTTOM = 0.55 * inch            # page number lives below this line
+LEFT = 0.58 * inch
+RIGHT = 0.58 * inch
+TOP = 0.48 * inch
+BOTTOM = 0.48 * inch
 
 CONTENT_WIDTH = PAGE_WIDTH - LEFT - RIGHT
-COL_GAP = 0.25 * inch
-COL_W = (CONTENT_WIDTH - COL_GAP) / 2
-COL_X = [LEFT, LEFT + COL_W + COL_GAP]
 
-PHOTO_MAX_H = 2.0 * inch        # tallest photo at scale 1.0
-CHART_W_PX_H_RATIO = 1.5 / 3.5  # chart height / width
+COLUMN_GAP = 0.24 * inch
+COLUMN_WIDTH = (CONTENT_WIDTH - COLUMN_GAP) / 2
 
-# (body font size, leading). The first size that lets everything fit on
-# two pages with reasonably large images is used. Both pages always share
-# the same size.
-TEXT_SIZES = [(9.0, 10.8), (8.7, 10.4), (8.4, 10.0), (8.1, 9.6)]
-GOOD_IMAGE_SCALE = 0.62         # prefer a smaller font over tiny images
-MIN_IMAGE_SCALE = 0.30
+COLUMN_X = [
+    LEFT,
+    LEFT + COLUMN_WIDTH + COLUMN_GAP,
+]
+
+FIRST_PAGE_TOP_GAP = 0.12 * inch
+
+IMAGE_MAX_HEIGHT = 1.65 * inch
+CHART_MAX_HEIGHT = 1.45 * inch
+
+IMAGE_QUALITY = 90
+IMAGE_MAX_DIMENSION = 1800
+
+PAGE_NUMBER_Y = 0.25 * inch
+
+# Keep a little safety space above the footer.
+FOOTER_SAFE_GAP = 0.10 * inch
+
+
+# =========================================================
+# ALGORITHM INFORMATION
+# =========================================================
 
 ALGORITHM_NAMES = {
     "gamma": "Gamma Correction",
     "contrast_stretching": "Contrast Stretching",
     "histogram_equalization": "Histogram Equalization",
-    "clahe": "CLAHE",
+    "clahe": "Contrast Limited Adaptive Histogram Equalization",
+    "adaptive_gamma": "Adaptive Gamma Correction",
+    "ssr": "Single-Scale Retinex",
+    "msr": "Multi-Scale Retinex",
+    "lime": "LIME-Style Illumination Enhancement",
+    "homomorphic": "Homomorphic Filtering",
 }
 
 SHORT_NAMES = {
     "gamma": "Gamma",
-    "contrast_stretching": "Contrast Str.",
+    "contrast_stretching": "Contrast",
     "histogram_equalization": "Hist. Eq.",
     "clahe": "CLAHE",
+    "adaptive_gamma": "Adaptive Gamma",
+    "ssr": "SSR",
+    "msr": "MSR",
+    "lime": "LIME",
+    "homomorphic": "Homomorphic",
 }
 
-ALGORITHM_ORDER = [
-    "gamma",
-    "contrast_stretching",
-    "histogram_equalization",
-    "clahe",
-]
+ALGORITHM_ORDER = list(ALGORITHM_NAMES.keys())
+
+
+ALGORITHM_EXPLANATIONS = {
+    "gamma": (
+        "Applies a nonlinear power-law intensity transformation. "
+        "Values below one brighten darker intensity levels, while "
+        "the gamma parameter controls transformation strength."
+    ),
+
+    "contrast_stretching": (
+        "Expands a selected input intensity interval across the "
+        "available output range. This increases global intensity "
+        "spread and can improve visibility when the original image "
+        "occupies a narrow intensity range."
+    ),
+
+    "histogram_equalization": (
+        "Uses the cumulative intensity histogram to redistribute "
+        "grayscale levels. It improves global contrast but may "
+        "increase noise or alter local appearance."
+    ),
+
+    "clahe": (
+        "Performs adaptive histogram equalization on local tiles. "
+        "Histogram clipping limits excessive amplification, while "
+        "interpolation reduces transitions between neighboring tiles."
+    ),
+
+    "adaptive_gamma": (
+        "Adjusts the gamma transformation according to image "
+        "brightness characteristics. The mapping adapts its "
+        "correction strength to the input illumination."
+    ),
+
+    "ssr": (
+        "Uses a single-scale Retinex model based on the logarithmic "
+        "difference between image intensity and a Gaussian estimate "
+        "of illumination."
+    ),
+
+    "msr": (
+        "Combines Retinex responses at multiple Gaussian scales. "
+        "The multiscale representation captures illumination "
+        "variation at different spatial extents."
+    ),
+
+    "lime": (
+        "Uses a simplified illumination-map estimation and "
+        "refinement approach to brighten low-light regions. "
+        "This implementation is LIME-style and does not claim "
+        "to reproduce every operation of the original LIME method."
+    ),
+
+    "homomorphic": (
+        "Applies logarithmic transformation, frequency-domain "
+        "filtering and inverse transformation to adjust slowly "
+        "varying illumination and fine image details."
+    ),
+}
+
+
+ALGORITHM_FORMULAS = {
+    "gamma": (
+        "s = 255 × (r / 255)<super>γ</super>"
+    ),
+
+    "contrast_stretching": (
+        "s = 255 × (r − r<sub>min</sub>) / "
+        "(r<sub>max</sub> − r<sub>min</sub>)"
+    ),
+
+    "histogram_equalization": (
+        "s<sub>k</sub> = round[(L − 1) × CDF(r<sub>k</sub>)]"
+    ),
+
+    "clahe": (
+        "s = T<sub>local, clipped</sub>(r)"
+    ),
+
+    "adaptive_gamma": (
+        "s = 255 × (r / 255)<super>γ(I)</super>"
+    ),
+
+    "ssr": (
+        "R(x,y) = log I(x,y) − log[F(x,y) * I(x,y)]"
+    ),
+
+    "msr": (
+        "R(x,y) = Σ w<sub>n</sub> "
+        "[log I(x,y) − log(F<sub>n</sub> * I)]"
+    ),
+
+    "lime": (
+        "J(x,y) ≈ I(x,y) / max(T(x,y), ε)"
+    ),
+
+    "homomorphic": (
+        "S(u,v) = H(u,v) × log[I(x,y)]"
+    ),
+}
+
+
+# =========================================================
+# REFERENCES
+# =========================================================
 
 REFERENCES = [
     (
         "S. Khormaeipour and F. Shakeri, "
-        "\"Enhancing low-light color image visibility with "
-        "hybrid contrast and saturation modification using "
-        "a saturation-aware map,\" Journal of Visual "
-        "Communication and Image Representation, vol. 107, "
-        "Art. no. 104392, Mar. 2025, "
+        "\"Enhancing low-light color image visibility with hybrid "
+        "contrast and saturation modification using a saturation-aware "
+        "map,\" Journal of Visual Communication and Image Representation, "
+        "vol. 107, Art. no. 104392, Mar. 2025, "
         "doi: 10.1016/j.jvcir.2025.104392."
     ),
+
     (
-        "S.-H. Jin, D.-M. Son, S.-H. Lee, Y.-H. Go, and "
-        "S.-H. Lee, \"Enhancing local contrast in low-light "
-        "images: A multiscale model with adaptive "
-        "redistribution of histogram excess,\" Mathematics, "
-        "vol. 13, no. 20, Art. no. 3282, Oct. 2025, "
+        "S.-H. Jin, D.-M. Son, S.-H. Lee, Y.-H. Go, and S.-H. Lee, "
+        "\"Enhancing local contrast in low-light images: A multiscale "
+        "model with adaptive redistribution of histogram excess,\" "
+        "Mathematics, vol. 13, no. 20, Art. no. 3282, Oct. 2025, "
         "doi: 10.3390/math13203282."
     ),
+
     (
-        "W. Deng and G. Xie, \"Image contrast enhancement "
-        "and brightness preservation based on an adaptive "
-        "histogram correction framework,\" Applied Optics, "
-        "vol. 64, no. 13, pp. 3502-3515, Apr. 2025, "
-        "doi: 10.1364/AO.557280."
+        "W. Deng and G. Xie, \"Image contrast enhancement and brightness "
+        "preservation based on an adaptive histogram correction "
+        "framework,\" Applied Optics, vol. 64, no. 13, pp. 3502–3515, "
+        "Apr. 2025, doi: 10.1364/AO.557280."
     ),
+
     (
         "M. M. Tatana, M. S. Tsoeu, and R. C. Maswanganyi, "
-        "\"Low-light image and video enhancement for more "
-        "robust computer vision tasks: A review,\" Journal "
-        "of Imaging, vol. 11, no. 4, Art. no. 125, Apr. 2025, "
+        "\"Low-light image and video enhancement for more robust "
+        "computer vision tasks: A review,\" Journal of Imaging, "
+        "vol. 11, no. 4, Art. no. 125, Apr. 2025, "
         "doi: 10.3390/jimaging11040125."
     ),
+
     (
-        "D. Mu, Z. Wang, Z. Li, et al., \"A new multi-scale "
-        "adaptive enhancement algorithm for low-illumination "
-        "coal mine images based on improved CLAHE and ACE,\" "
-        "Discover Artificial Intelligence, vol. 5, "
-        "Art. no. 406, Dec. 2025, "
+        "D. Mu, Z. Wang, Z. Li, et al., \"A new multi-scale adaptive "
+        "enhancement algorithm for low-illumination coal mine images "
+        "based on improved CLAHE and ACE,\" Discover Artificial "
+        "Intelligence, vol. 5, Art. no. 406, Dec. 2025, "
         "doi: 10.1007/s44163-025-00663-5."
     ),
 ]
 
 
+TITLE = (
+    "Performance Evaluation of Classical Low-Light "
+    "Image Enhancement Algorithms"
+)
+
+
 # =========================================================
-# FONTS  (Times New Roman if available, so γ and − render)
+# FONT REGISTRATION
 # =========================================================
 
 def _register_fonts():
-    """
-    Returns (regular, bold, italic, bold_italic, has_unicode).
-    Tries Times New Roman (Windows/macOS) then Liberation Serif (Linux).
-    Falls back to built-in Times, where γ and − are not available.
-    """
 
     candidates = [
         (
@@ -152,43 +289,53 @@ def _register_fonts():
             "C:/Windows/Fonts/timesi.ttf",
             "C:/Windows/Fonts/timesbi.ttf",
         ),
+
         (
             "/Library/Fonts/Times New Roman.ttf",
             "/Library/Fonts/Times New Roman Bold.ttf",
             "/Library/Fonts/Times New Roman Italic.ttf",
             "/Library/Fonts/Times New Roman Bold Italic.ttf",
         ),
+
         (
-            "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf",
+            "/usr/share/fonts/truetype/liberation/"
+            "LiberationSerif-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation/"
+            "LiberationSerif-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/"
+            "LiberationSerif-Italic.ttf",
+            "/usr/share/fonts/truetype/liberation/"
+            "LiberationSerif-BoldItalic.ttf",
         ),
     ]
 
+    names = (
+        "ATHERSerif",
+        "ATHERSerif-Bold",
+        "ATHERSerif-Italic",
+        "ATHERSerif-BoldItalic",
+    )
+
     for files in candidates:
 
-        if not all(Path(f).is_file() for f in files):
+        if not all(Path(path).is_file() for path in files):
             continue
 
         try:
 
-            names = (
-                "ATHERSerif",
-                "ATHERSerif-Bold",
-                "ATHERSerif-Italic",
-                "ATHERSerif-BoldItalic",
-            )
-
             for name, path in zip(names, files):
-                pdfmetrics.registerFont(TTFont(name, path))
+
+                if name not in pdfmetrics.getRegisteredFontNames():
+                    pdfmetrics.registerFont(
+                        TTFont(name, path)
+                    )
 
             addMapping("ATHERSerif", 0, 0, names[0])
             addMapping("ATHERSerif", 1, 0, names[1])
             addMapping("ATHERSerif", 0, 1, names[2])
             addMapping("ATHERSerif", 1, 1, names[3])
 
-            return names + (True,)
+            return names
 
         except Exception:
             continue
@@ -198,94 +345,14 @@ def _register_fonts():
         "Times-Bold",
         "Times-Italic",
         "Times-BoldItalic",
-        False,
     )
 
 
-F_REG, F_BOLD, F_ITAL, F_BI, HAS_UNICODE = _register_fonts()
-
-GAMMA = "γ" if HAS_UNICODE else "<i>gamma</i>"
-MINUS = "−" if HAS_UNICODE else "-"
+F_REG, F_BOLD, F_ITAL, F_BI = _register_fonts()
 
 
 # =========================================================
-# STYLES
-# =========================================================
-
-def make_styles(size, lead):
-
-    return {
-
-        "title": ParagraphStyle(
-            "title", fontName=F_BOLD, fontSize=22, leading=25,
-            alignment=TA_CENTER, spaceAfter=3,
-        ),
-
-        "author": ParagraphStyle(
-            "author", fontName=F_REG, fontSize=10, leading=12,
-            alignment=TA_CENTER, spaceAfter=3,
-        ),
-
-        "abstract": ParagraphStyle(
-            "abstract", fontName=F_REG, fontSize=size, leading=lead,
-            alignment=TA_JUSTIFY, spaceAfter=0,
-        ),
-
-        "heading": ParagraphStyle(
-            "heading", fontName=F_BOLD, fontSize=size + 1.5,
-            leading=size + 3.5, alignment=TA_LEFT,
-            spaceBefore=5, spaceAfter=2, keepWithNext=1,
-        ),
-
-        "subhead": ParagraphStyle(
-            "subhead", fontName=F_BI, fontSize=size + 0.3, leading=lead,
-            alignment=TA_LEFT, spaceBefore=2, spaceAfter=1,
-            keepWithNext=1,
-        ),
-
-        "body": ParagraphStyle(
-            "body", fontName=F_REG, fontSize=size, leading=lead,
-            alignment=TA_JUSTIFY, spaceAfter=2,
-        ),
-
-        "formula": ParagraphStyle(
-            "formula", fontName=F_BOLD, fontSize=size, leading=lead,
-            alignment=TA_LEFT, spaceBefore=1, spaceAfter=1,
-            keepWithNext=1,
-        ),
-
-        "small": ParagraphStyle(
-            "small", fontName=F_REG, fontSize=size - 0.5, leading=lead,
-            alignment=TA_JUSTIFY, spaceAfter=1,
-        ),
-
-        "caption": ParagraphStyle(
-            "caption", fontName=F_REG, fontSize=size - 1.2,
-            leading=lead - 1.4, alignment=TA_CENTER,
-            spaceBefore=1, spaceAfter=3,
-        ),
-
-        "tablecap": ParagraphStyle(
-            "tablecap", fontName=F_REG, fontSize=size - 1.4,
-            leading=lead - 1.6, alignment=TA_CENTER,
-            spaceBefore=1, spaceAfter=2, keepWithNext=1,
-        ),
-
-        "refs": ParagraphStyle(
-            "refs", fontName=F_REG, fontSize=size - 1.0,
-            leading=lead - 1.0, alignment=TA_JUSTIFY, spaceAfter=1,
-            leftIndent=0,
-        ),
-
-        "tablehead": ParagraphStyle(
-            "tablehead", fontName=F_BOLD, fontSize=7, leading=8,
-            alignment=TA_CENTER,
-        ),
-    }
-
-
-# =========================================================
-# GENERAL HELPERS
+# TEXT AND NUMBER HELPERS
 # =========================================================
 
 def safe_text(value):
@@ -293,22 +360,42 @@ def safe_text(value):
     if value is None:
         return "N/A"
 
-    text = str(value)
-
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return html.escape(
+        str(value)
+    ).replace("\n", " ")
 
 
 def number(value, decimals=2):
 
     try:
-        return f"{float(value):.{decimals}f}"
 
-    except (TypeError, ValueError):
+        value = float(value)
+
+        if not np.isfinite(value):
+            return "N/A"
+
+        return f"{value:.{decimals}f}"
+
+    except (TypeError, ValueError, OverflowError):
         return "N/A"
+
+
+def numeric_value(value, field_name):
+
+    try:
+        result = float(value)
+
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(
+            f"Invalid numeric value for {field_name}: {value}"
+        )
+
+    if not np.isfinite(result):
+        raise ValueError(
+            f"Non-finite numeric value for {field_name}."
+        )
+
+    return result
 
 
 def algorithm_name(key):
@@ -319,202 +406,436 @@ def algorithm_name(key):
     )
 
 
-def draw_paragraph(pdf, text, x, y, width, style):
+def valid_image_path(path):
 
-    paragraph = Paragraph(text, style)
+    if not path:
+        return False
 
-    _, height = paragraph.wrap(width, PAGE_HEIGHT)
+    try:
+        return Path(path).is_file()
 
-    paragraph.drawOn(pdf, x, y - height)
-
-    return y - height
-
-
-def draw_page_number(pdf, page):
-
-    pdf.saveState()
-
-    pdf.setFont(F_REG, 9)
-
-    pdf.setFillColor(colors.black)
-
-    pdf.drawCentredString(PAGE_WIDTH / 2, 0.28 * inch, str(page))
-
-    pdf.restoreState()
+    except (TypeError, ValueError, OSError):
+        return False
 
 
 # =========================================================
-# BENCHMARK VALIDATION
+# STYLES
+# =========================================================
+
+def make_styles():
+
+    return {
+
+        "title": ParagraphStyle(
+            "ATHER_Title",
+            fontName=F_BOLD,
+            fontSize=18,
+            leading=21,
+            alignment=TA_CENTER,
+            spaceAfter=5,
+        ),
+
+        "author": ParagraphStyle(
+            "ATHER_Author",
+            fontName=F_REG,
+            fontSize=9.5,
+            leading=11.5,
+            alignment=TA_CENTER,
+            spaceAfter=3,
+        ),
+
+        "abstract": ParagraphStyle(
+            "ATHER_Abstract",
+            fontName=F_REG,
+            fontSize=9,
+            leading=11,
+            alignment=TA_JUSTIFY,
+            spaceAfter=0,
+        ),
+
+        "heading": ParagraphStyle(
+            "ATHER_Heading",
+            fontName=F_BOLD,
+            fontSize=11,
+            leading=13,
+            alignment=TA_LEFT,
+            spaceBefore=5,
+            spaceAfter=3,
+            keepWithNext=True,
+            keepTogether=True,
+            allowWidows=0,
+            allowOrphans=0,
+        ),
+
+        "subhead": ParagraphStyle(
+            "ATHER_Subhead",
+            fontName=F_BI,
+            fontSize=10,
+            leading=12,
+            alignment=TA_LEFT,
+            spaceBefore=3,
+            spaceAfter=2,
+            keepWithNext=True,
+            allowWidows=0,
+            allowOrphans=0,
+        ),
+
+        "body": ParagraphStyle(
+            "ATHER_Body",
+            fontName=F_REG,
+            fontSize=9.5,
+            leading=11.5,
+            alignment=TA_JUSTIFY,
+            spaceAfter=4,
+            allowWidows=0,
+            allowOrphans=0,
+        ),
+
+        "formula": ParagraphStyle(
+            "ATHER_Formula",
+            fontName=F_BOLD,
+            fontSize=9,
+            leading=11,
+            alignment=TA_LEFT,
+            spaceBefore=2,
+            spaceAfter=3,
+            allowWidows=0,
+            allowOrphans=0,
+        ),
+
+        "small": ParagraphStyle(
+            "ATHER_Small",
+            fontName=F_REG,
+            fontSize=8.7,
+            leading=10.5,
+            alignment=TA_JUSTIFY,
+            spaceAfter=3,
+            allowWidows=0,
+            allowOrphans=0,
+        ),
+
+        "caption": ParagraphStyle(
+            "ATHER_Caption",
+            fontName=F_ITAL,
+            fontSize=8.7,
+            leading=10.5,
+            alignment=TA_CENTER,
+            spaceBefore=3,
+            spaceAfter=4,
+        ),
+
+        "tablecap": ParagraphStyle(
+            "ATHER_TableCaption",
+            fontName=F_REG,
+            fontSize=8.5,
+            leading=10,
+            alignment=TA_CENTER,
+            spaceBefore=2,
+            spaceAfter=4,
+            keepWithNext=True,
+        ),
+
+        "refs": ParagraphStyle(
+            "ATHER_References",
+            fontName=F_REG,
+            fontSize=8.5,
+            leading=10.2,
+            alignment=TA_JUSTIFY,
+            spaceAfter=4,
+            allowWidows=0,
+            allowOrphans=0,
+        ),
+
+        "tablehead": ParagraphStyle(
+            "ATHER_TableHead",
+            fontName=F_BOLD,
+            fontSize=8,
+            leading=9.5,
+            alignment=TA_CENTER,
+        ),
+
+        "tablecell": ParagraphStyle(
+            "ATHER_TableCell",
+            fontName=F_REG,
+            fontSize=8,
+            leading=9.5,
+            alignment=TA_CENTER,
+        ),
+    }
+
+
+# =========================================================
+# RESULT VALIDATION
 # =========================================================
 
 def validate_results(results):
 
     if not results:
-
         raise ValueError(
-            "No benchmark results found. "
-            "Run all four benchmarks first."
+            "No benchmark results were supplied. "
+            "Run benchmarks before generating a report."
         )
 
-    lookup = {r.get("algorithm"): r for r in results}
+    lookup = {}
 
-    missing = set(ALGORITHM_ORDER) - set(lookup)
+    for result in results:
 
-    if missing:
+        if not isinstance(result, dict):
+            raise ValueError(
+                "A benchmark result is not a dictionary."
+            )
 
-        raise ValueError(
-            "Missing benchmark algorithms: "
-            + ", ".join(sorted(missing))
-        )
+        key = result.get("algorithm")
 
-    ordered = [lookup[key] for key in ALGORITHM_ORDER]
+        if not key:
+            raise ValueError(
+                "A benchmark result has no algorithm key."
+            )
 
-    for result in ordered:
+        if key not in ALGORITHM_NAMES:
+            raise ValueError(
+                f"Unsupported algorithm: {key}"
+            )
+
+        if key in lookup:
+            raise ValueError(
+                f"Duplicate result for algorithm: {key}"
+            )
 
         if "processing_time_ms" not in result:
-
             raise ValueError(
-                "Missing processing_time_ms for "
-                + str(result.get("algorithm"))
+                f"Missing processing time for {key}."
             )
+
+        numeric_value(
+            result["processing_time_ms"],
+            f"{key}.processing_time_ms"
+        )
 
         metrics = result.get("enhanced_metrics")
 
         if not isinstance(metrics, dict):
-
             raise ValueError(
-                "Missing enhanced_metrics for "
-                + str(result.get("algorithm"))
+                f"Missing enhanced_metrics for {key}."
             )
 
-        for key in (
+        for metric in (
             "brightness",
             "contrast",
             "entropy",
             "dynamic_range",
         ):
 
-            if key not in metrics:
-
+            if metric not in metrics:
                 raise ValueError(
-                    f"Missing {key} for "
-                    + str(result.get("algorithm"))
+                    f"Missing {metric} for {key}."
                 )
 
-    return ordered
+            numeric_value(
+                metrics[metric],
+                f"{key}.{metric}"
+            )
+
+        lookup[key] = result
+
+    return [
+        lookup[key]
+        for key in ALGORITHM_ORDER
+        if key in lookup
+    ]
 
 
 # =========================================================
-# CHARTS (column-sized figures)
+# CHART GENERATION
 # =========================================================
 
-def _mpl_font():
-
-    return "DejaVu Sans"
-
-
-def create_chart(results, title, metric_key=None, processing_time=False):
+def create_chart(
+    results,
+    title,
+    metric_key=None,
+    processing_time=False
+):
 
     labels = [
-        SHORT_NAMES.get(i["algorithm"], algorithm_name(i["algorithm"]))
-        for i in results
+        SHORT_NAMES[result["algorithm"]]
+        for result in results
     ]
 
     if processing_time:
 
-        values = [float(i["processing_time_ms"]) for i in results]
+        values = [
+            numeric_value(
+                result["processing_time_ms"],
+                "processing_time_ms"
+            )
+            for result in results
+        ]
+
         ylabel = "Milliseconds"
 
     else:
 
         values = [
-            float(i["enhanced_metrics"][metric_key]) for i in results
+            numeric_value(
+                result["enhanced_metrics"][metric_key],
+                metric_key
+            )
+            for result in results
         ]
 
         ylabel = {
-            "brightness": "Intensity",
-            "contrast": "Std. deviation",
+            "brightness": "Mean intensity",
+            "contrast": "Standard deviation",
             "entropy": "Bits",
-        }.get(metric_key, metric_key.replace("_", " ").title())
+        }.get(metric_key, metric_key)
 
-    figure = Figure(figsize=(3.5, 1.5), dpi=220)
+    figure = Figure(
+        figsize=(5.0, 2.0),
+        dpi=180
+    )
 
     chart_canvas = FigureCanvasAgg(figure)
-
     axis = figure.add_subplot(111)
 
-    bars = axis.bar(range(len(labels)), values)
+    bars = axis.bar(
+        range(len(labels)),
+        values,
+        width=0.62
+    )
 
-    axis.set_title(title, fontsize=7.5, pad=3)
+    axis.set_title(
+        title,
+        fontsize=9,
+        pad=5
+    )
 
-    axis.set_ylabel(ylabel, fontsize=6.5)
+    axis.set_ylabel(
+        ylabel,
+        fontsize=8
+    )
 
     axis.set_xticks(range(len(labels)))
 
-    axis.set_xticklabels(labels, fontsize=6)
+    axis.set_xticklabels(
+        labels,
+        fontsize=7
+    )
 
-    axis.tick_params(axis="y", labelsize=6)
+    axis.tick_params(
+        axis="y",
+        labelsize=7
+    )
 
-    axis.grid(axis="y", alpha=0.2, linewidth=0.4)
+    axis.grid(
+        axis="y",
+        alpha=0.2,
+        linewidth=0.4
+    )
 
     axis.set_axisbelow(True)
 
-    top = max(values) if values else 1
+    minimum = min(values) if values else 0
+    maximum = max(values) if values else 1
 
-    axis.set_ylim(0, top * 1.2 if top > 0 else 1)
+    # Safe axis limits for positive, negative and zero values.
+    if minimum < 0:
+
+        lower = minimum * 1.2
+
+        upper = (
+            maximum * 1.2
+            if maximum > 0
+            else maximum + max(abs(maximum) * 0.2, 1)
+        )
+
+    else:
+
+        lower = 0
+        upper = maximum * 1.2 if maximum > 0 else 1
+
+    if upper <= lower:
+        upper = lower + 1
+
+    axis.set_ylim(lower, upper)
 
     for bar, value in zip(bars, values):
 
+        if value >= 0:
+            offset = 3
+            vertical_alignment = "bottom"
+        else:
+            offset = -3
+            vertical_alignment = "top"
+
         axis.annotate(
             number(value),
-            (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-            xytext=(0, 2),
+            (
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height()
+            ),
+            xytext=(0, offset),
             textcoords="offset points",
             ha="center",
-            fontsize=5.5,
+            va=vertical_alignment,
+            fontsize=6.5
         )
 
-    figure.tight_layout(pad=0.5)
+    figure.tight_layout(pad=0.8)
 
     buffer = BytesIO()
 
     chart_canvas.print_png(buffer)
 
     buffer.seek(0)
-
     figure.clear()
 
     return buffer
 
 
-def create_histogram(original_path, enhanced_paths):
+def create_histogram(
+    original_path,
+    enhanced_paths,
+    results
+):
 
-    if not original_path or not Path(original_path).is_file():
+    if not valid_image_path(original_path):
         return None
 
-    figure = Figure(figsize=(3.5, 1.5), dpi=220)
+    figure = Figure(
+        figsize=(5.0, 2.0),
+        dpi=180
+    )
 
     chart_canvas = FigureCanvasAgg(figure)
-
     axis = figure.add_subplot(111)
 
-    paths = [("Original", original_path)]
+    paths = [
+        ("Original", original_path)
+    ]
 
-    for algorithm in ALGORITHM_ORDER:
+    for result in results:
 
-        path = enhanced_paths.get(algorithm)
+        key = result["algorithm"]
+        path = enhanced_paths.get(key)
 
-        if path and Path(path).is_file():
+        if valid_image_path(path):
 
-            paths.append((algorithm_name(algorithm), path))
+            paths.append((
+                SHORT_NAMES.get(key, key),
+                path
+            ))
+
+    plotted = 0
 
     for label, path in paths:
 
         try:
 
-            image = PILImage.open(path).convert("L")
+            with PILImage.open(path) as image:
 
-            array = np.asarray(image)
+                array = np.asarray(
+                    image.convert("L")
+                )
 
             axis.hist(
                 array.ravel(),
@@ -522,185 +843,425 @@ def create_histogram(original_path, enhanced_paths):
                 range=(0, 255),
                 density=True,
                 histtype="step",
-                linewidth=0.8,
-                label=label,
+                linewidth=0.9,
+                label=label
             )
 
-            image.close()
+            plotted += 1
 
         except Exception:
             continue
 
-    axis.set_title("Grayscale Intensity Histogram", fontsize=7.5, pad=3)
+    if plotted == 0:
+        figure.clear()
+        return None
 
-    axis.set_xlabel("Intensity", fontsize=6.5)
+    axis.set_title(
+        "Grayscale Intensity Distribution",
+        fontsize=9,
+        pad=5
+    )
 
-    axis.set_ylabel("Density", fontsize=6.5)
+    axis.set_xlabel(
+        "Intensity",
+        fontsize=8
+    )
 
-    axis.tick_params(labelsize=6)
+    axis.set_ylabel(
+        "Density",
+        fontsize=8
+    )
 
-    axis.legend(fontsize=5, ncol=2, loc="upper right")
+    axis.tick_params(labelsize=7)
 
-    axis.grid(alpha=0.2, linewidth=0.4)
+    axis.legend(
+        fontsize=6,
+        ncol=3,
+        loc="upper right"
+    )
 
-    figure.tight_layout(pad=0.5)
+    axis.grid(
+        alpha=0.2,
+        linewidth=0.4
+    )
+
+    figure.tight_layout(pad=0.8)
 
     buffer = BytesIO()
 
     chart_canvas.print_png(buffer)
 
     buffer.seek(0)
-
     figure.clear()
 
     return buffer
 
 
 # =========================================================
-# IMAGE HELPERS
+# IMAGE ASSETS
 # =========================================================
 
 def photo_asset(path):
-    """Load a photo once, downsample, keep as JPEG bytes."""
 
-    with PILImage.open(path) as im:
+    if not valid_image_path(path):
+        raise FileNotFoundError(
+            f"Image file does not exist: {path}"
+        )
 
-        im = im.convert("RGB")
+    with PILImage.open(path) as source:
 
-        im.thumbnail((1100, 1100))
+        image = source.convert("RGB")
 
-        buf = BytesIO()
+        # Downsampling is only for PDF size.
+        # Aspect ratio is always preserved.
+        image.thumbnail(
+            (
+                IMAGE_MAX_DIMENSION,
+                IMAGE_MAX_DIMENSION
+            ),
+            PILImage.Resampling.LANCZOS
+        )
 
-        im.save(buf, "JPEG", quality=88)
+        buffer = BytesIO()
 
-        return buf.getvalue(), im.width, im.height
+        image.save(
+            buffer,
+            format="JPEG",
+            quality=IMAGE_QUALITY,
+            optimize=True
+        )
+
+        return (
+            buffer.getvalue(),
+            image.width,
+            image.height
+        )
 
 
 def chart_asset(buffer):
 
     data = buffer.getvalue()
 
-    with PILImage.open(BytesIO(data)) as im:
+    with PILImage.open(BytesIO(data)) as image:
 
-        return data, im.width, im.height
-
-
-def picture(asset, k, max_h):
-    """Column-width image (times k) that keeps its aspect ratio."""
-
-    data, w_px, h_px = asset
-
-    width = COL_W
-    height = width * h_px / w_px
-
-    if height > max_h:
-
-        height = max_h
-        width = height * w_px / h_px
-
-    img = Image(BytesIO(data), width=width * k, height=height * k)
-
-    img.hAlign = "CENTER"
-
-    return img
+        return (
+            data,
+            image.width,
+            image.height
+        )
 
 
-def results_table(results, S):
+def picture(asset, max_height):
 
-    head = lambda t: Paragraph(t, S["tablehead"])
+    data, width_px, height_px = asset
+
+    if width_px <= 0 or height_px <= 0:
+        raise ValueError(
+            "Invalid image dimensions in report."
+        )
+
+    # The same scale factor is used for width and height.
+    # This prevents image stretching and distortion.
+    scale = min(
+        COLUMN_WIDTH / width_px,
+        max_height / height_px
+    )
+
+    display_width = width_px * scale
+    display_height = height_px * scale
+
+    image = Image(
+        BytesIO(data),
+        width=display_width,
+        height=display_height,
+        kind="proportional"
+    )
+
+    image.hAlign = "CENTER"
+
+    return image
+
+
+# =========================================================
+# IMAGE AND CAPTION GROUP
+# =========================================================
+
+def image_block(
+    asset,
+    caption,
+    max_height,
+    styles
+):
+
+    image = picture(
+        asset,
+        max_height
+    )
+
+    caption_paragraph = Paragraph(
+        safe_text(caption),
+        styles["caption"]
+    )
+
+    # Image and caption move together to the next frame
+    # when they cannot fit in the remaining column space.
+    return KeepTogether([
+
+        image,
+
+        caption_paragraph,
+
+        Spacer(1, 3),
+
+    ])
+
+
+# =========================================================
+# RESULTS TABLE
+# =========================================================
+
+def results_table(results, styles):
+
+    def cell(value):
+
+        return Paragraph(
+            safe_text(value),
+            styles["tablecell"]
+        )
+
+    def table_heading(value):
+
+        return Paragraph(
+            value,
+            styles["tablehead"]
+        )
 
     data = [[
-        head("Algorithm"),
-        head("Time<br/>(ms)"),
-        head("Bright."),
-        head("Contrast"),
-        head("Entropy"),
-        head("Range"),
+
+        table_heading("Algorithm"),
+
+        table_heading("Time<br/>(ms)"),
+
+        table_heading("Brightness"),
+
+        table_heading("Contrast"),
+
+        table_heading("Entropy"),
+
+        table_heading("Range"),
+
     ]]
 
     for result in results:
 
-        m = result["enhanced_metrics"]
+        metrics = result["enhanced_metrics"]
 
         data.append([
-            algorithm_name(result["algorithm"]),
-            number(result["processing_time_ms"]),
-            number(m["brightness"]),
-            number(m["contrast"]),
-            number(m["entropy"], 3),
-            safe_text(m["dynamic_range"]),
+
+            cell(SHORT_NAMES[result["algorithm"]]),
+
+            cell(number(result["processing_time_ms"])),
+
+            cell(number(metrics["brightness"])),
+
+            cell(number(metrics["contrast"])),
+
+            cell(number(metrics["entropy"], 3)),
+
+            cell(number(metrics["dynamic_range"], 2)),
+
         ])
 
-    widths = [COL_W * f for f in (0.35, 0.11, 0.13, 0.14, 0.14, 0.13)]
+    widths = [
 
-    table = Table(data, colWidths=widths)
+        COLUMN_WIDTH * 0.27,
+
+        COLUMN_WIDTH * 0.14,
+
+        COLUMN_WIDTH * 0.16,
+
+        COLUMN_WIDTH * 0.16,
+
+        COLUMN_WIDTH * 0.14,
+
+        COLUMN_WIDTH * 0.13,
+
+    ]
+
+    table = Table(
+        data,
+        colWidths=widths,
+        repeatRows=1,
+        hAlign="CENTER",
+        splitByRow=1,
+        spaceBefore=0,
+        spaceAfter=0
+    )
 
     table.setStyle(TableStyle([
-        ("FONTNAME", (0, 1), (-1, -1), F_REG),
-        ("FONTSIZE", (0, 1), (-1, -1), 7),
-        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
-        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+
         ("LINEABOVE", (0, 0), (-1, 0), 0.8, colors.black),
-        ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
+
+        ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.black),
+
         ("LINEBELOW", (0, -1), (-1, -1), 0.8, colors.black),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+
     ]))
 
     return table
 
 
 # =========================================================
-# DOCUMENT (two pages, two columns, continuous flow)
+# ABSTRACT
 # =========================================================
 
-ABSTRACT = (
-    "<b>Abstract—</b> This report presents a measured performance "
-    "evaluation of four deterministic, non-AI low-light image "
-    "enhancement methods implemented in ATHER: Gamma Correction, "
-    "Contrast Stretching, Histogram Equalization, and Contrast "
-    "Limited Adaptive Histogram Equalization (CLAHE). The algorithms "
-    "are compared using measured execution time and image statistics, "
-    "including mean brightness, contrast, entropy, and dynamic range. "
-    "Visual and histogram comparisons are included when the "
-    "corresponding image files are provided. Results describe the "
-    "tested image and computing environment and are not presented as "
-    "universal rankings."
-)
+def create_abstract(results):
 
-TITLE = (
-    "Performance Evaluation of Classical Low-Light "
-    "Image Enhancement Algorithms"
-)
+    names = ", ".join(
+        algorithm_name(result["algorithm"])
+        for result in results
+    )
+
+    return (
+        "<b>Abstract—</b> This report presents a measured "
+        "evaluation of selected deterministic classical image "
+        "enhancement algorithms implemented in ATHER. The selected "
+        f"methods are {safe_text(names)}. Each method is evaluated "
+        "using the same input image. Processing time, mean brightness, "
+        "contrast, entropy and dynamic range are reported using actual "
+        "benchmark outputs. Visual and histogram comparisons are "
+        "included when image assets are supplied. Results describe "
+        "the tested input and computing environment and do not "
+        "represent universal algorithm rankings."
+    )
 
 
-def draw_header(pdf, S):
-    """Full-width title block. Returns the y where the columns start."""
+# =========================================================
+# PAGE HEADER
+# =========================================================
+
+def draw_paragraph(
+    pdf,
+    text,
+    x,
+    y,
+    width,
+    style
+):
+
+    paragraph = Paragraph(
+        text,
+        style
+    )
+
+    _, height = paragraph.wrap(
+        width,
+        PAGE_HEIGHT
+    )
+
+    paragraph.drawOn(
+        pdf,
+        x,
+        y - height
+    )
+
+    return y - height
+
+
+def draw_header(pdf, styles, abstract):
 
     y = PAGE_HEIGHT - TOP
 
-    y = draw_paragraph(pdf, TITLE, LEFT, y, CONTENT_WIDTH, S["title"])
+    y = draw_paragraph(
+        pdf,
+        TITLE,
+        LEFT,
+        y,
+        CONTENT_WIDTH,
+        styles["title"]
+    )
 
     y = draw_paragraph(
         pdf,
         "ATHER Research System<br/>"
         "Classical Image Processing and Analysis",
-        LEFT, y - 1, CONTENT_WIDTH, S["author"],
+        LEFT,
+        y - 2,
+        CONTENT_WIDTH,
+        styles["author"]
     )
 
     y = draw_paragraph(
-        pdf, ABSTRACT, LEFT, y - 2, CONTENT_WIDTH, S["abstract"]
+        pdf,
+        abstract,
+        LEFT,
+        y - 3,
+        CONTENT_WIDTH,
+        styles["abstract"]
     )
 
-    return y - 5
+    y -= 5
+
+    pdf.saveState()
+
+    pdf.setStrokeColor(colors.black)
+    pdf.setLineWidth(0.5)
+
+    pdf.line(
+        LEFT,
+        y,
+        PAGE_WIDTH - RIGHT,
+        y
+    )
+
+    pdf.restoreState()
+
+    return y - FIRST_PAGE_TOP_GAP
 
 
-def make_doc(target, S, header_bottom):
+# =========================================================
+# PAGE NUMBER
+# =========================================================
 
-    doc = BaseDocTemplate(
+def draw_page_number(pdf, document):
+
+    pdf.saveState()
+
+    pdf.setFont(F_REG, 8)
+    pdf.setFillColor(colors.black)
+
+    pdf.drawCentredString(
+        PAGE_WIDTH / 2,
+        PAGE_NUMBER_Y,
+        str(document.page)
+    )
+
+    pdf.restoreState()
+
+
+# =========================================================
+# DOCUMENT AND COLUMN FLOW
+# =========================================================
+
+def make_doc(
+    target,
+    styles,
+    first_page_header_bottom
+):
+
+    document = BaseDocTemplate(
         target,
         pagesize=A4,
         leftMargin=LEFT,
@@ -710,362 +1271,602 @@ def make_doc(target, S, header_bottom):
         title=TITLE,
         author="ATHER Research System",
         subject=(
-            "Measured evaluation of classical low-light "
+            "Measured evaluation of classical "
             "image enhancement algorithms"
         ),
+        pageCompression=1
     )
 
-    kw = dict(
-        leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0
+    frame_options = {
+
+        "leftPadding": 0,
+
+        "rightPadding": 0,
+
+        "topPadding": 0,
+
+        "bottomPadding": 0,
+
+        "showBoundary": 0,
+
+    }
+
+    first_height = (
+        first_page_header_bottom
+        - BOTTOM
+        - FOOTER_SAFE_GAP
     )
 
-    h1 = header_bottom - BOTTOM
-    h2 = PAGE_HEIGHT - TOP - BOTTOM
+    later_height = (
+        PAGE_HEIGHT
+        - TOP
+        - BOTTOM
+        - FOOTER_SAFE_GAP
+    )
 
-    first = [
-        Frame(COL_X[0], BOTTOM, COL_W, h1, id="p1c1", **kw),
-        Frame(COL_X[1], BOTTOM, COL_W, h1, id="p1c2", **kw),
+    if first_height <= 0:
+
+        raise RuntimeError(
+            "The first-page header leaves no room for report content."
+        )
+
+    if later_height <= 0:
+
+        raise RuntimeError(
+            "Invalid page frame height."
+        )
+
+    first_frames = [
+
+        Frame(
+            COLUMN_X[0],
+            BOTTOM + FOOTER_SAFE_GAP,
+            COLUMN_WIDTH,
+            first_height,
+            id="first_left",
+            **frame_options
+        ),
+
+        Frame(
+            COLUMN_X[1],
+            BOTTOM + FOOTER_SAFE_GAP,
+            COLUMN_WIDTH,
+            first_height,
+            id="first_right",
+            **frame_options
+        ),
+
     ]
 
-    later = [
-        Frame(COL_X[0], BOTTOM, COL_W, h2, id="p2c1", **kw),
-        Frame(COL_X[1], BOTTOM, COL_W, h2, id="p2c2", **kw),
+    later_frames = [
+
+        Frame(
+            COLUMN_X[0],
+            BOTTOM + FOOTER_SAFE_GAP,
+            COLUMN_WIDTH,
+            later_height,
+            id="later_left",
+            **frame_options
+        ),
+
+        Frame(
+            COLUMN_X[1],
+            BOTTOM + FOOTER_SAFE_GAP,
+            COLUMN_WIDTH,
+            later_height,
+            id="later_right",
+            **frame_options
+        ),
+
     ]
 
-    def on_first(pdf, d):
-        draw_header(pdf, S)
-        draw_page_number(pdf, d.page)
+    def first_page(pdf, doc):
 
-    def on_later(pdf, d):
-        draw_page_number(pdf, d.page)
+        # Full-width first-page title and abstract.
+        draw_header(
+            pdf,
+            styles,
+            doc.abstract_text
+        )
 
-    doc.addPageTemplates([
-        PageTemplate(id="first", frames=first, onPage=on_first),
-        PageTemplate(id="later", frames=later, onPage=on_later),
+        draw_page_number(
+            pdf,
+            doc
+        )
+
+    def later_page(pdf, doc):
+
+        draw_page_number(
+            pdf,
+            doc
+        )
+
+    document.addPageTemplates([
+
+        PageTemplate(
+            id="first",
+            frames=first_frames,
+            onPage=first_page
+        ),
+
+        PageTemplate(
+            id="later",
+            frames=later_frames,
+            onPage=later_page
+        ),
+
     ])
 
-    return doc
+    return document
 
 
-def build_story(k, S, ctx):
+# =========================================================
+# SECTION HELPERS
+# =========================================================
 
-    P = lambda t, s="body": Paragraph(t, S[s])
-    H = lambda n, t: Paragraph(f"{n}. {t.upper()}", S["heading"])
-    SUB = lambda t: Paragraph(t, S["subhead"])
-    FORM = lambda t: Paragraph(t, S["formula"])
+def heading(number_text, title, styles):
+
+    return Paragraph(
+        f"{number_text}. {safe_text(title).upper()}",
+        styles["heading"]
+    )
+
+
+def paragraph(
+    text,
+    styles,
+    style_name="body"
+):
+
+    return Paragraph(
+        text,
+        styles[style_name]
+    )
+
+
+def algorithm_block(index, result, styles):
+
+    key = result["algorithm"]
+
+    name = algorithm_name(key)
+
+    explanation = ALGORITHM_EXPLANATIONS.get(
+        key,
+        "A registered classical image enhancement method."
+    )
+
+    formula = ALGORITHM_FORMULAS.get(
+        key,
+        "Refer to the implementation source for the applied transformation."
+    )
+
+    return KeepTogether([
+
+        Paragraph(
+            f"{index}. {safe_text(name)}",
+            styles["subhead"]
+        ),
+
+        Paragraph(
+            safe_text(explanation),
+            styles["body"]
+        ),
+
+        Paragraph(
+            formula,
+            styles["formula"]
+        ),
+
+        Spacer(1, 2),
+
+    ])
+
+
+# =========================================================
+# STORY GENERATION
+# =========================================================
+
+def build_story(styles, context):
 
     story = [
 
+        # The first page keeps its full-width title and abstract.
+        # The next page uses the regular two-column template.
         NextPageTemplate("later"),
 
-        P(
-            "<b>Index Terms—</b> Low-light image enhancement, gamma "
-            "correction, contrast stretching, histogram equalization, "
-            "CLAHE, image quality assessment, classical image "
-            "processing.",
-            "small",
+        paragraph(
+            "<b>Index Terms—</b> Low-light enhancement, "
+            "classical image processing, histogram equalization, "
+            "Retinex, illumination correction and image quality assessment.",
+            styles,
+            "small"
         ),
 
         HRFlowable(
-            width="100%", thickness=0.5, color=colors.black,
-            spaceBefore=2, spaceAfter=1,
+            width="100%",
+            thickness=0.45,
+            color=colors.black,
+            spaceBefore=2,
+            spaceAfter=3
         ),
 
-        # ---------------- I ----------------
-        H("I", "Introduction"),
+        heading("I", "Introduction", styles),
 
-        P(
+        paragraph(
             "Low-light images can exhibit low mean intensity, weak "
-            "local contrast, and reduced visibility of scene details. "
-            "Classical image processing methods modify pixel "
-            "intensities or local histogram distributions to improve "
-            "visibility without training data or neural networks. "
-            "Recent studies continue to investigate histogram-based, "
-            "gamma-based, and local-contrast enhancement strategies "
-            "[1]–[5]. ATHER evaluates four classical methods using "
-            "the same input image and records the resulting image "
-            "statistics and processing time."
+            "contrast and reduced visibility of scene details. "
+            "Classical image-processing methods modify pixel "
+            "intensities, local histograms or illumination estimates "
+            "without neural networks or training data. This report "
+            "compares the selected ATHER implementations using "
+            "identical input data and measured output statistics.",
+            styles
         ),
 
-        # ---------------- II ----------------
-        H("II", "Mathematical Foundations"),
-
-        SUB("A. Gamma Correction"),
-        P("Gamma correction applies a nonlinear intensity mapping:"),
-        FORM(f"s = 255 (r / 255)<super>{GAMMA}</super>"),
-        P(
-            "where r is the input intensity, s is the output "
-            f"intensity, and {GAMMA} controls the nonlinear "
-            "brightness mapping."
+        heading(
+            "II",
+            "Selected Algorithms and Mathematical Methods",
+            styles
         ),
 
-        SUB("B. Contrast Stretching"),
-        P("A min–max intensity mapping is expressed as:"),
-        FORM(
-            f"s = 255 × (r {MINUS} r<sub>min</sub>) / "
-            f"(r<sub>max</sub> {MINUS} r<sub>min</sub>)"
-        ),
-        P(
-            "where r<sub>min</sub> and r<sub>max</sub> represent the "
-            "selected intensity limits."
-        ),
-
-        SUB("C. Histogram Equalization"),
-        P(
-            "Histogram equalization maps intensity levels using the "
-            "cumulative distribution function:"
-        ),
-        FORM(
-            f"s<sub>k</sub> = round[(L {MINUS} 1) "
-            "CDF(r<sub>k</sub>)]"
-        ),
-        P("where L is the number of intensity levels."),
-
-        SUB("D. Contrast Limited Adaptive Histogram Equalization"),
-        P(
-            "CLAHE applies local histogram equalization to contextual "
-            "regions and clips histogram excess to limit "
-            "over-amplification. Interpolation between neighboring "
-            "regions helps reduce visible transitions. Recent work "
-            "examines adaptive histogram redistribution and "
-            "local-contrast enhancement [2], [3], [5]."
-        ),
-
-        # ---------------- III ----------------
-        H("III", "Experimental Methodology"),
-
-        P(ctx["methodology"]),
     ]
 
-    if ctx["parameter_text"]:
-        story.append(P(ctx["parameter_text"], "small"))
+    for index, result in enumerate(
+        context["results"],
+        start=1
+    ):
+
+        story.append(
+            algorithm_block(
+                index,
+                result,
+                styles
+            )
+        )
 
     story += [
 
-        # ---------------- IV ----------------
-        H("IV", "Performance Metrics"),
-
-        P(
-            "<b>Mean brightness:</b> the average grayscale intensity "
-            "of the image. <b>Contrast:</b> represented by the "
-            "standard deviation of grayscale intensity. "
-            "<b>Entropy:</b> describes the distribution of intensity "
-            "information. <b>Dynamic range:</b> the difference "
-            "between maximum and minimum intensity. "
-            "<b>Processing time:</b> the measured execution duration "
-            "in milliseconds. Any noise estimate supplied by the "
-            "benchmark is approximate and is not a ground-truth "
-            "noise measurement."
+        heading(
+            "III",
+            "Experimental Methodology",
+            styles
         ),
 
-        P(
-            "PSNR and SSIM are not reported unless a valid, aligned "
-            "ground-truth reference image is available. This avoids "
-            "presenting unsupported reference-based quality "
-            "measurements."
+        paragraph(
+            context["methodology"],
+            styles
         ),
 
-        # ---------------- V ----------------
+    ]
+
+    if context["parameter_text"]:
+
+        story.append(
+            paragraph(
+                context["parameter_text"],
+                styles,
+                "small"
+            )
+        )
+
+    story += [
+
+        heading(
+            "IV",
+            "Performance Metrics",
+            styles
+        ),
+
+        paragraph(
+            "<b>Mean brightness:</b> average grayscale intensity. "
+            "<b>Contrast:</b> standard deviation of grayscale "
+            "intensity. <b>Entropy:</b> intensity-distribution "
+            "information in bits. <b>Dynamic range:</b> maximum "
+            "minus minimum intensity. <b>Processing time:</b> "
+            "measured algorithm execution time in milliseconds. "
+            "Any noise estimate is approximate and is not a "
+            "ground-truth noise measurement.",
+            styles
+        ),
+
+        paragraph(
+            "PSNR and SSIM are omitted unless a valid aligned "
+            "ground-truth reference image is available. No "
+            "reference-based metric is fabricated.",
+            styles,
+            "small"
+        ),
+
+        heading(
+            "V",
+            "Experimental Results",
+            styles
+        ),
+
         KeepTogether([
-            H("V", "Experimental Results"),
-            P("TABLE I. MEASURED ENHANCEMENT RESULTS", "tablecap"),
-            results_table(ctx["results"], S),
+
+            Paragraph(
+                "TABLE I. MEASURED RESULTS FOR SELECTED ALGORITHMS",
+                styles["tablecap"]
+            ),
+
+            results_table(
+                context["results"],
+                styles
+            ),
+
+            Spacer(1, 4),
+
         ]),
 
-        Paragraph(
-            "The table reports the measured values returned by the "
-            "ATHER benchmark for the selected input. The values are "
-            "specific to this experiment and the computing "
-            "environment used during execution.",
-            ParagraphStyle(
-                "afterTable", parent=S["body"], spaceBefore=3
-            ),
+        paragraph(
+            "Values are taken from the ATHER benchmark output "
+            "for the selected image and computing environment.",
+            styles,
+            "small"
         ),
+
     ]
 
-    # ---------------- VI (photos stacked) ----------------
-    photos = ctx["photos"]
+    # -----------------------------------------------------
+    # VISUAL COMPARISON
+    # -----------------------------------------------------
 
-    for index, (label, asset) in enumerate(photos):
+    if context["photos"]:
 
-        block = []
+        story.append(
+            heading(
+                "VI",
+                "Visual Comparison",
+                styles
+            )
+        )
 
-        if index == 0:
-            block.append(H("VI", "Visual Comparison"))
+        for label, asset in context["photos"]:
 
-        block.append(picture(asset, k, PHOTO_MAX_H))
-        block.append(P(label, "caption"))
+            story.append(
+                image_block(
+                    asset,
+                    label,
+                    IMAGE_MAX_HEIGHT,
+                    styles
+                )
+            )
 
-        if index == len(photos) - 1:
-            block.append(P(
-                "Fig. 1. Original image and enhanced outputs "
-                "generated by the evaluated algorithms.",
-                "caption",
-            ))
+    # -----------------------------------------------------
+    # HISTOGRAM
+    # -----------------------------------------------------
 
-        story.append(KeepTogether(block))
+    if context["histogram"]:
 
-    if ctx["histogram"]:
+        story.append(
+            Paragraph(
+                "Histogram Comparison",
+                styles["subhead"]
+            )
+        )
 
-        story.append(KeepTogether([
-            SUB("Histogram Comparison"),
-            picture(ctx["histogram"], k, 99 * inch),
-            P(
-                "Fig. 2. Grayscale intensity distributions of the "
-                "original and enhanced images.",
-                "caption",
-            ),
-        ]))
+        story.append(
+            image_block(
+                context["histogram"],
+                "Grayscale intensity distributions for the original "
+                "and selected enhanced images.",
+                CHART_MAX_HEIGHT,
+                styles
+            )
+        )
 
-    # ---------------- VII (graphs stacked) ----------------
-    charts = ctx["charts"]
+    # -----------------------------------------------------
+    # PERFORMANCE CHARTS
+    # -----------------------------------------------------
 
-    for index, asset in enumerate(charts):
+    story.append(
+        heading(
+            "VII",
+            "Graphical Performance Comparison",
+            styles
+        )
+    )
 
-        block = []
+    for index, (label, asset) in enumerate(
+        context["charts"],
+        start=1
+    ):
 
-        if index == 0:
-            block.append(H("VII", "Graphical Performance Comparison"))
+        story.append(
+            image_block(
+                asset,
+                f"Fig. {index}. {label}.",
+                CHART_MAX_HEIGHT,
+                styles
+            )
+        )
 
-        block.append(picture(asset, k, 99 * inch))
-
-        if index == len(charts) - 1:
-            block.append(P(
-                "Fig. 3. Measured brightness, contrast, entropy, and "
-                "processing-time comparisons.",
-                "caption",
-            ))
-
-        story.append(KeepTogether(block))
+    # -----------------------------------------------------
+    # DISCUSSION
+    # -----------------------------------------------------
 
     story += [
 
-        H("VIII", "Discussion"),
-
-        P(
-            "The measured results characterize the response of the "
-            "four algorithms on the selected input image. "
-            "Brightness, contrast, entropy, and dynamic range "
-            "describe different aspects of the output and should be "
-            "interpreted together with visual inspection. Processing "
-            "time indicates computational cost on the tested system. "
-            "A larger value for an individual metric does not by "
-            "itself establish better perceptual quality. The results "
-            "therefore support a per-image comparison rather than a "
-            "universal ranking of methods."
+        heading(
+            "VIII",
+            "Discussion",
+            styles
         ),
 
-        H("IX", "Limitations"),
-
-        P(
-            "The reported values depend on the input image, image "
-            "dimensions, implementation settings, and computing "
-            "environment. Execution time can vary with processor "
-            "load and repeated runs. Noise estimation, when "
-            "available, is approximate. Reference-based metrics such "
-            "as PSNR and SSIM are intentionally omitted when no "
-            "valid aligned ground-truth image is provided. The "
-            "experiment does not establish that one method is best "
-            "for every scene."
+        paragraph(
+            "The results characterize the selected algorithms on "
+            "the tested input. Brightness, contrast, entropy and "
+            "dynamic range describe different properties and must "
+            "be interpreted together with visual inspection. "
+            "Processing time indicates computational cost on the "
+            "tested system. A higher value for an individual metric "
+            "does not automatically imply better perceptual quality.",
+            styles
         ),
 
-        P("<b>Recorded environment:</b>", "small"),
+        heading(
+            "IX",
+            "Limitations",
+            styles
+        ),
+
+        paragraph(
+            "Results depend on image content, image dimensions, "
+            "implementation settings and system load. Processing "
+            "times can vary between runs. The Retinex and LIME-style "
+            "methods are evaluated as implemented in ATHER; their "
+            "results should not be interpreted as proof of exact "
+            "reproduction of every published variant. Reference-based "
+            "metrics are not reported without aligned ground truth.",
+            styles
+        ),
+
+        paragraph(
+            "<b>Recorded environment:</b>",
+            styles,
+            "small"
+        ),
+
     ]
 
-    for line in ctx["environment_lines"]:
-        story.append(P(line, "small"))
+    for line in context["environment_lines"]:
+
+        story.append(
+            paragraph(
+                line,
+                styles,
+                "small"
+            )
+        )
+
+    # -----------------------------------------------------
+    # CONCLUSION
+    # -----------------------------------------------------
 
     story += [
 
-        H("X", "Conclusion"),
-
-        P(
-            "This report evaluated Gamma Correction, Contrast "
-            "Stretching, Histogram Equalization, and CLAHE using "
-            "measured image statistics and processing time. The "
-            "report presents the benchmark table, visual comparison, "
-            "histogram, and comparative graphs in a two-column "
-            "technical format. Broader conclusions require testing "
-            "across a larger set of low-light images and, where "
-            "available, aligned reference images for reference-based "
-            "quality assessment."
+        heading(
+            "X",
+            "Conclusion",
+            styles
         ),
 
-        H("XI", "References"),
+        paragraph(
+            "This report evaluated the selected classical "
+            "enhancement methods using measured image statistics, "
+            "execution time, visual outputs and histogram "
+            "comparisons when available. The results provide a "
+            "per-image experimental comparison rather than a "
+            "universal ranking. Further evaluation across multiple "
+            "images is required for broader conclusions.",
+            styles
+        ),
+
+        heading(
+            "XI",
+            "References",
+            styles
+        ),
+
     ]
 
-    for index, reference in enumerate(REFERENCES, start=1):
+    for index, reference in enumerate(
+        REFERENCES,
+        start=1
+    ):
 
-        story.append(P(f"[{index}] {safe_text(reference)}", "refs"))
+        story.append(
+            paragraph(
+                f"[{index}] {safe_text(reference)}",
+                styles,
+                "refs"
+            )
+        )
 
     return story
 
 
-def pages_needed(size, lead, k, ctx):
-    """Build to memory and report how many pages the story needs."""
+# =========================================================
+# INPUT IMAGE INFORMATION
+# =========================================================
 
-    S = make_styles(size, lead)
+def get_image_dimensions(original_image_path):
 
-    dummy = canvas.Canvas(BytesIO(), pagesize=A4)
+    if not valid_image_path(original_image_path):
+        return "not available"
 
-    header_bottom = draw_header(dummy, S)
+    try:
 
-    doc = make_doc(BytesIO(), S, header_bottom)
+        with PILImage.open(original_image_path) as image:
 
-    doc.build(build_story(k, S, ctx))
+            return (
+                f"{image.width} × {image.height} pixels "
+                f"({image.width * image.height:,} pixels total)"
+            )
 
-    return doc.page
+    except Exception:
+        return "not available"
 
 
-def choose_layout(ctx):
-    """
-    Pick the text size and image scale. Text size is identical on both
-    pages; only the images shrink until everything fits on two pages.
-    """
+# =========================================================
+# PDF HEADER MEASUREMENT
+# =========================================================
 
-    fallback = None
+def calculate_header_bottom(styles, abstract):
 
-    for size, lead in TEXT_SIZES:
+    temporary_buffer = BytesIO()
 
-        # coarse scan, then refine upward in 0.01 steps
-        k = 1.0
-        found = None
-
-        while k >= MIN_IMAGE_SCALE:
-
-            if pages_needed(size, lead, k, ctx) <= 2:
-
-                found = k
-                break
-
-            k = round(k - 0.04, 3)
-
-        if found is None:
-            continue
-
-        for extra in (0.03, 0.02, 0.01):
-
-            trial = round(found + extra, 3)
-
-            if trial <= 1.0 and pages_needed(size, lead, trial, ctx) <= 2:
-
-                found = trial
-                break
-
-        if fallback is None:
-            fallback = (size, lead, found)
-
-        if found >= GOOD_IMAGE_SCALE:
-            return size, lead, found
-
-    if fallback:
-        return fallback
-
-    raise RuntimeError(
-        "The report cannot fit on two pages even with the smallest "
-        "text and images. Shorten the supplied parameter/environment "
-        "text or reduce the number of images."
+    temporary_canvas = canvas.Canvas(
+        temporary_buffer,
+        pagesize=A4
     )
+
+    header_bottom = draw_header(
+        temporary_canvas,
+        styles,
+        abstract
+    )
+
+    temporary_canvas.save()
+
+    return header_bottom
+
+
+# =========================================================
+# PDF OUTPUT VERIFICATION
+# =========================================================
+
+def verify_pdf(path):
+
+    if (
+        not path.is_file()
+        or path.stat().st_size == 0
+    ):
+
+        raise RuntimeError(
+            "PDF generation failed: output file is empty."
+        )
+
+    try:
+
+        from pypdf import PdfReader
+
+        reader = PdfReader(str(path))
+
+        page_count = len(reader.pages)
+
+        if page_count < 1:
+
+            raise RuntimeError(
+                "The generated PDF contains no pages."
+            )
+
+        return page_count
+
+    except ImportError:
+
+        return None
 
 
 # =========================================================
@@ -1083,10 +1884,18 @@ def generate_ieee_report(
     system_info=None,
 ):
     """
-    Generate a two-page A4 IEEE-style PDF.
+    Generate a continuous, multi-page, two-column A4 report.
 
-    Compatible with the existing ATHER main.py function call.
+    Supports any selection of one or more registered algorithms.
+
+    The report automatically creates additional pages when needed.
+
+    Existing main.py function signature is preserved.
     """
+
+    # -----------------------------------------------------
+    # VALIDATE INPUTS
+    # -----------------------------------------------------
 
     results = validate_results(results)
 
@@ -1099,150 +1908,343 @@ def generate_ieee_report(
     if output_path.suffix.lower() != ".pdf":
         output_path = output_path.with_suffix(".pdf")
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-    # ---------- text used in the story ----------
+    styles = make_styles()
 
-    dimension_text = "not available"
+    # -----------------------------------------------------
+    # IMAGE INFORMATION
+    # -----------------------------------------------------
 
-    if original_image_path and Path(original_image_path).is_file():
+    dimension_text = get_image_dimensions(
+        original_image_path
+    )
 
-        try:
+    # -----------------------------------------------------
+    # METHODOLOGY
+    # -----------------------------------------------------
 
-            with PILImage.open(original_image_path) as im:
-
-                dimension_text = (
-                    f"{im.width} × {im.height} pixels and "
-                    f"{im.width * im.height} total pixels"
-                )
-
-        except Exception:
-            pass
+    selected_names = [
+        algorithm_name(result["algorithm"])
+        for result in results
+    ]
 
     methodology = (
         f"The evaluated input was <b>{safe_text(image_name)}</b>, "
-        f"with dimensions {dimension_text}. The gamma parameter "
-        f"supplied to the report was {number(gamma_value, 3)}. Each "
-        "algorithm was evaluated against the same original image. "
-        "Execution time was recorded by the ATHER benchmark process. "
-        "Image statistics were calculated for the original and "
-        "enhanced outputs."
+        f"with dimensions {safe_text(dimension_text)}. "
+        f"The experiment selected {len(results)} algorithm(s): "
+        f"{safe_text(', '.join(selected_names))}. "
+        f"The gamma parameter supplied to the report was "
+        f"{number(gamma_value, 3)}. Each selected algorithm was "
+        "evaluated against the same original input image. "
+        "Execution time was recorded by the ATHER benchmark "
+        "process, and output statistics were obtained from "
+        "the corresponding benchmark results."
     )
+
+    # -----------------------------------------------------
+    # ALGORITHM PARAMETERS
+    # -----------------------------------------------------
+
+    parameter_parts = []
+
+    for key, value in algorithm_parameters.items():
+
+        if isinstance(value, dict):
+
+            value_text = ", ".join(
+                f"{safe_text(name)}: {safe_text(item)}"
+                for name, item in value.items()
+            )
+
+        else:
+
+            value_text = safe_text(value)
+
+        parameter_parts.append(
+            f"{safe_text(algorithm_name(key))}: {value_text}"
+        )
 
     parameter_text = ""
 
-    if algorithm_parameters:
+    if parameter_parts:
 
-        parts = []
+        parameter_text = (
+            "<b>Algorithm parameters:</b> "
+            + "; ".join(parameter_parts)
+            + "."
+        )
 
-        for key, value in algorithm_parameters.items():
-
-            if isinstance(value, dict):
-
-                value = ", ".join(f"{a}: {b}" for a, b in value.items())
-
-            parts.append(f"{algorithm_name(key)}: {safe_text(value)}")
-
-        parameter_text = "<b>Parameters:</b> " + "; ".join(parts) + "."
+    # -----------------------------------------------------
+    # SYSTEM ENVIRONMENT
+    # -----------------------------------------------------
 
     environment = dict(system_info) or {
+
         "Operating System": platform.platform(),
+
         "Python Version": platform.python_version(),
+
         "Processor": platform.processor() or "N/A",
+
     }
 
     environment_lines = [
-        f"{safe_text(a)}: {safe_text(b)}" for a, b in environment.items()
+
+        f"{safe_text(key)}: {safe_text(value)}"
+
+        for key, value in environment.items()
+
     ]
 
-    # ---------- visual assets (loaded once) ----------
-
-    labels = {
-        "gamma": "(b) Gamma Correction",
-        "contrast_stretching": "(c) Contrast Stretching",
-        "histogram_equalization": "(d) Histogram Equalization",
-        "clahe": "(e) CLAHE",
-    }
+    # -----------------------------------------------------
+    # ORIGINAL AND ENHANCED IMAGES
+    # -----------------------------------------------------
 
     photos = []
 
-    if original_image_path and Path(original_image_path).is_file():
+    if valid_image_path(original_image_path):
 
-        photos.append(("(a) Original", photo_asset(original_image_path)))
+        photos.append((
+            "(a) Original image",
+            photo_asset(original_image_path)
+        ))
 
-    for algorithm in ALGORITHM_ORDER:
+    for index, result in enumerate(
+        results,
+        start=1
+    ):
 
-        path = enhanced_image_paths.get(algorithm)
+        key = result["algorithm"]
+        path = enhanced_image_paths.get(key)
 
-        if path and Path(path).is_file():
+        if valid_image_path(path):
 
-            photos.append((labels[algorithm], photo_asset(path)))
+            photos.append((
+                f"({index}) {algorithm_name(key)}",
+                photo_asset(path)
+            ))
 
-    histogram = create_histogram(original_image_path, enhanced_image_paths)
+    # -----------------------------------------------------
+    # HISTOGRAM
+    # -----------------------------------------------------
 
-    charts = [
-        chart_asset(
-            create_chart(results, "Mean Brightness", "brightness")
+    histogram_buffer = create_histogram(
+        original_image_path,
+        enhanced_image_paths,
+        results
+    )
+
+    histogram = (
+        chart_asset(histogram_buffer)
+        if histogram_buffer is not None
+        else None
+    )
+
+    # -----------------------------------------------------
+    # PERFORMANCE CHARTS
+    # -----------------------------------------------------
+
+    chart_definitions = [
+
+        (
+            "Mean brightness comparison",
+            "brightness",
+            False
         ),
-        chart_asset(
-            create_chart(results, "Contrast", "contrast")
+
+        (
+            "Contrast comparison",
+            "contrast",
+            False
         ),
-        chart_asset(
-            create_chart(results, "Entropy", "entropy")
+
+        (
+            "Entropy comparison",
+            "entropy",
+            False
         ),
-        chart_asset(
-            create_chart(results, "Processing Time", None, True)
+
+        (
+            "Processing time comparison",
+            None,
+            True
         ),
+
     ]
 
-    ctx = {
+    charts = []
+
+    for label, metric, is_time in chart_definitions:
+
+        chart_buffer = create_chart(
+            results,
+            label,
+            metric,
+            processing_time=is_time
+        )
+
+        charts.append((
+            label,
+            chart_asset(chart_buffer)
+        ))
+
+    # -----------------------------------------------------
+    # REPORT CONTEXT
+    # -----------------------------------------------------
+
+    context = {
+
         "results": results,
+
         "methodology": methodology,
+
         "parameter_text": parameter_text,
+
         "environment_lines": environment_lines,
+
         "photos": photos,
-        "histogram": chart_asset(histogram) if histogram else None,
+
+        "histogram": histogram,
+
         "charts": charts,
+
     }
 
-    # ---------- fit, then write the real file ----------
+    # -----------------------------------------------------
+    # FIRST-PAGE HEADER
+    # -----------------------------------------------------
 
-    size, lead, k = choose_layout(ctx)
+    abstract = create_abstract(results)
 
-    S = make_styles(size, lead)
+    header_bottom = calculate_header_bottom(
+        styles,
+        abstract
+    )
 
-    dummy = canvas.Canvas(BytesIO(), pagesize=A4)
+    if header_bottom <= BOTTOM + 0.5 * inch:
 
-    header_bottom = draw_header(dummy, S)
+        raise RuntimeError(
+            "The first-page report header is too large "
+            "to leave enough space for the report body."
+        )
 
-    doc = make_doc(str(output_path), S, header_bottom)
+    # -----------------------------------------------------
+    # BUILD TO A TEMPORARY PDF FIRST
+    # -----------------------------------------------------
 
-    doc.build(build_story(k, S, ctx))
+    temporary_path = None
 
-    if not output_path.is_file() or output_path.stat().st_size == 0:
-
-        raise RuntimeError("PDF generation failed: output file is empty.")
-
-    # exact two-page check (pip install pypdf)
     try:
 
-        from pypdf import PdfReader
+        with tempfile.NamedTemporaryFile(
+            prefix="ather_report_",
+            suffix=".pdf",
+            dir=str(output_path.parent),
+            delete=False
+        ) as temporary_file:
 
-        count = len(PdfReader(str(output_path)).pages)
-
-        if count != 2:
-
-            raise RuntimeError(
-                f"Expected exactly 2 pages, but generated {count}."
+            temporary_path = Path(
+                temporary_file.name
             )
 
-    except ImportError:
-        pass
+        document = make_doc(
+            str(temporary_path),
+            styles,
+            header_bottom
+        )
+
+        # The first-page callback needs the abstract.
+        document.abstract_text = abstract
+
+        story = build_story(
+            styles,
+            context
+        )
+
+        document.build(story)
+
+        # -------------------------------------------------
+        # VERIFY THE GENERATED PDF
+        # -------------------------------------------------
+
+        page_count = verify_pdf(
+            temporary_path
+        )
+
+        if page_count is None:
+
+            print(
+                "PDF generated. Install pypdf to enable "
+                "automatic page-count verification."
+            )
+
+        else:
+
+            print(
+                f"ATHER report generated successfully: "
+                f"{page_count} page(s)."
+            )
+
+        # -------------------------------------------------
+        # REPLACE THE TARGET ONLY AFTER SUCCESS
+        # -------------------------------------------------
+
+        os.replace(
+            str(temporary_path),
+            str(output_path)
+        )
+
+        temporary_path = None
+
+    except Exception:
+
+        if (
+            temporary_path is not None
+            and temporary_path.exists()
+        ):
+
+            temporary_path.unlink(
+                missing_ok=True
+            )
+
+        raise
 
     return str(output_path)
 
 
+# =========================================================
+# MODULE TEST ENTRY
+# =========================================================
+
 if __name__ == "__main__":
 
-    print("ATHER Two-Page IEEE Report Generator")
-    print("Generate reports through the ATHER application.")
+    print(
+        "ATHER Continuous IEEE Report Generator"
+    )
+
+    print(
+        "Supported algorithms:",
+        len(ALGORITHM_NAMES)
+    )
+
+    print(
+        "Layout: continuous two-column, "
+        "automatic multi-page"
+    )
+
+    print("\nSupported algorithms:")
+
+    for key in ALGORITHM_ORDER:
+
+        print(
+            f"- {key}: {algorithm_name(key)}"
+        )
+
+    print(
+        "\nGenerate reports through the ATHER application "
+        "after running benchmarks."
+    )

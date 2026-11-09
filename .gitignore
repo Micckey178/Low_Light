@@ -1,23 +1,46 @@
 
-# Python virtual environment
+# ==========================================
+# ATHER - Git Ignore Configuration
+# ==========================================
+
+# Python virtual environments
 .venv/
 venv/
 
 # Python cache
 __pycache__/
 *.py[cod]
+*.pyo
 
 # IDE settings
 .vscode/
+.idea/
 
 # Temporary files
 *.log
 *.tmp
+*.bak
 
 # Operating system files
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# PyInstaller generated files
+build/
+dist/
+*.spec
 
 # Generated reports and experimental outputs
 outputs/*
 !outputs/.gitkeep
+
+ieee_report/
+
+# Git review and temporary comparison files
+main_changes.txt
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
