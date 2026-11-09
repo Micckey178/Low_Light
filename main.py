@@ -57,6 +57,7 @@ from core.enhancement import ALGORITHMS, apply_enhancement
 from core.performance import benchmark_algorithm
 from core.report_generator import generate_ieee_report
 from core.adaptive_engine import build_processing_plan, ENGINE_VERSION as ACP_ENGINE_VERSION
+from core.acp_validation import validate_real_image_plan
 
 
 # =========================================================
@@ -1668,6 +1669,11 @@ class ATHERApp(QMainWindow):
         self.acp_analyse_button.clicked.connect(self.run_acp_analysis)
         action_row.addWidget(self.acp_analyse_button)
 
+        self.acp_validate_button = QPushButton("Validate Current Photograph")
+        self.acp_validate_button.setObjectName("secondaryButton")
+        self.acp_validate_button.clicked.connect(self.validate_current_acp_photo)
+        action_row.addWidget(self.acp_validate_button)
+
         self.acp_open_method_button = QPushButton(
             "Open Selected Recommendation in Enhancement Lab"
         )
@@ -1802,8 +1808,77 @@ class ATHERApp(QMainWindow):
         explanation_layout.addWidget(self.acp_explanation_text)
         layout.addWidget(explanation_group)
 
+        validation_group = QGroupBox("Real-Photograph Validation")
+        validation_layout = QVBoxLayout(validation_group)
+        validation_note = QLabel(
+            "Run repeatability and integrity checks against the actual photograph "
+            "currently loaded in ATHER. This checks measurements and rule output; "
+            "it does not claim that an enhancement is perceptually optimal."
+        )
+        validation_note.setWordWrap(True)
+        validation_note.setObjectName("muted")
+        validation_layout.addWidget(validation_note)
+        self.acp_validation_text = QPlainTextEdit()
+        self.acp_validation_text.setReadOnly(True)
+        self.acp_validation_text.setMinimumHeight(190)
+        self.acp_validation_text.setPlaceholderText(
+            "Load a photograph, run ACP analysis, then select Validate Current Photograph."
+        )
+        validation_layout.addWidget(self.acp_validation_text)
+        layout.addWidget(validation_group)
+
         layout.addStretch()
         self.add_page("acp", page)
+
+    def validate_current_acp_photo(self):
+        """Validate the ACP plan against the actual image loaded in the workspace."""
+        if self.original_image is None:
+            self.acp_validation_text.setPlainText(
+                "No photograph is loaded. Upload or capture an image first."
+            )
+            return
+
+        if not self.acp_plan:
+            self.run_acp_analysis()
+            if not self.acp_plan:
+                self.acp_validation_text.setPlainText(
+                    "ACP analysis is unavailable. Run analysis again after checking the error above."
+                )
+                return
+
+        self.acp_validate_button.setEnabled(False)
+        self.acp_validation_text.setPlainText(
+            "Validating the current photograph and repeating ACP analysis..."
+        )
+        QApplication.processEvents()
+        try:
+            result = validate_real_image_plan(
+                self.original_image.copy(),
+                self.acp_plan,
+                ALGORITHMS.keys(),
+            )
+            lines = [result.get("summary", "Validation completed."), ""]
+            for index, check in enumerate(result.get("checks", []), start=1):
+                marker = "PASS" if check.get("passed") else "FAIL"
+                lines.append(f"{index}. [{marker}] {check.get('name', 'Check')}")
+                lines.append(f"   {check.get('detail', '')}")
+            lines.extend([
+                "",
+                "Interpretation: these checks establish input/plan consistency and "
+                "repeatability for this photograph. They do not establish visual quality, "
+                "recover lost detail, infer photographer intent, or replace human review."
+            ])
+            self.acp_validation_text.setPlainText("\n".join(lines))
+            status = "PASSED" if result.get("passed") else "NEEDS REVIEW"
+            self.acp_status_label.setText(
+                f"ACP analysis available • Real-photograph validation: {status}"
+            )
+        except Exception as error:
+            self.acp_validation_text.setPlainText(
+                f"Validation could not complete: {type(error).__name__}: {error}"
+            )
+        finally:
+            self.acp_validate_button.setEnabled(True)
 
     def run_acp_analysis(self):
         """Analyse the current original image using deterministic ACP rules."""
