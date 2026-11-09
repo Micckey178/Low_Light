@@ -1,214 +1,227 @@
 
 """
-ATHER - Classical Digital Image Processing Engine
-=================================================
+ATHER - Classical Image Enhancement Engine
+Phase 2: Quality, Colour Preservation and Stability
 
-Stage 1: Classical Low-Light Image Enhancement
+Strictly classical digital image processing.
+No AI, ML, neural networks or pretrained models.
 
-Existing algorithms:
-1. Gamma Correction
-2. Contrast Stretching
-3. Histogram Equalization
-4. CLAHE
+Supported input:
+    - uint8 grayscale images
+    - uint8 BGR colour images
 
-New algorithms:
-5. Adaptive Gamma Correction
-6. Single-Scale Retinex (SSR)
-7. Multi-Scale Retinex (MSR)
-8. LIME
-9. Homomorphic Filtering
-
-Requirements:
-- No AI, ML, neural networks or pretrained models.
-- Input images are preserved.
-- All algorithms return uint8 images.
-- Original image dimensions are preserved.
-- Supports grayscale and three-channel BGR images.
+All algorithms return uint8 images with the original dimensions.
 """
 
 import cv2
 import numpy as np
 
 
-# =========================================================
-# COMMON VALIDATION
-# =========================================================
+# ============================================================
+# IMAGE VALIDATION
+# ============================================================
 
 def validate_image(image):
-    """Validate and copy an 8-bit grayscale or BGR image."""
+    """Validate a grayscale or BGR uint8 image."""
 
     if image is None:
-        raise ValueError("Input image cannot be empty.")
+        raise ValueError("Input image is empty or None.")
 
     if not isinstance(image, np.ndarray):
-        raise TypeError("Input must be a NumPy array.")
-
-    if image.size == 0:
-        raise ValueError("Input image contains no pixel data.")
+        raise TypeError("Input must be a NumPy image array.")
 
     if image.dtype != np.uint8:
-        raise TypeError("Expected an 8-bit image with dtype uint8.")
+        raise TypeError("Only uint8 images are supported.")
 
-    if image.ndim not in (2, 3):
-        raise ValueError("Image must be grayscale or a color image.")
+    if image.ndim == 2:
+        return image
 
-    if image.ndim == 3 and image.shape[2] != 3:
-        raise ValueError("Color image must contain three channels.")
+    if image.ndim == 3 and image.shape[2] == 3:
+        return image
 
-    return image.copy()
+    raise ValueError(
+        "Unsupported image format. Use grayscale or 3-channel BGR."
+    )
 
 
 def _get_luminance(image):
-    """Extract luminance while preserving the original color channels."""
+    """Return luminance and colour-space information."""
+
+    validate_image(image)
 
     if image.ndim == 2:
         return image.copy(), None
 
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-    luminance, a, b = cv2.split(lab)
-
-    return luminance, (a, b)
+    return lab[:, :, 0].copy(), lab
 
 
-def _restore_luminance(luminance, color_channels):
-    """Restore processed luminance to a grayscale or BGR image."""
+def _restore_luminance(original, luminance):
+    """Restore modified luminance while preserving colour information."""
 
     luminance = np.clip(
-        luminance, 0, 255
+        np.nan_to_num(luminance, nan=0.0, posinf=255.0, neginf=0.0),
+        0,
+        255
     ).astype(np.uint8)
 
-    if color_channels is None:
+    if original.ndim == 2:
         return luminance
 
-    a, b = color_channels
+    lab = cv2.cvtColor(original, cv2.COLOR_BGR2LAB)
+    lab[:, :, 0] = luminance
 
-    lab = cv2.merge((luminance, a, b))
-
-    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-
-
-def _percentile_normalize(image, low=1.0, high=99.0):
-    """Robustly normalize floating-point values to 0-255."""
-
-    image = np.asarray(image, dtype=np.float32)
-
-    lower = float(np.percentile(image, low))
-    upper = float(np.percentile(image, high))
-
-    if upper <= lower + 1e-8:
-        return np.clip(image, 0, 255).astype(np.uint8)
-
-    result = (image - lower) * (255.0 / (upper - lower))
+    result = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
     return np.clip(result, 0, 255).astype(np.uint8)
 
 
-# =========================================================
+def _safe_uint8(image):
+    """Convert an array safely to uint8."""
+
+    image = np.nan_to_num(
+        image,
+        nan=0.0,
+        posinf=255.0,
+        neginf=0.0
+    )
+
+    return np.clip(image, 0, 255).astype(np.uint8)
+
+
+def _percentile_normalize(
+    image,
+    low_percentile=1.0,
+    high_percentile=99.0
+):
+    """Robust percentile normalization with constant-image protection."""
+
+    image = np.asarray(image, dtype=np.float32)
+
+    if not np.all(np.isfinite(image)):
+        image = np.nan_to_num(image)
+
+    low = float(np.percentile(image, low_percentile))
+    high = float(np.percentile(image, high_percentile))
+
+    if high - low < 1e-6:
+        return np.clip(image, 0, 255)
+
+    normalized = (image - low) * (255.0 / (high - low))
+
+    return np.clip(normalized, 0, 255)
+
+
+def _blend_luminance(original, enhanced, strength):
+    """Blend enhanced luminance with original luminance."""
+
+    strength = float(np.clip(strength, 0.0, 1.0))
+
+    result = (
+        original.astype(np.float32) * (1.0 - strength)
+        + enhanced.astype(np.float32) * strength
+    )
+
+    return _safe_uint8(result)
+
+
+# ============================================================
 # 1. GAMMA CORRECTION
-# =========================================================
+# ============================================================
 
 def gamma_correction(image, gamma=0.6):
     """
-    Nonlinear intensity transformation.
+    Gamma correction.
 
     Formula:
-        s = 255 * (r / 255)^gamma
+        s = 255 * (r / 255) ** gamma
 
-    gamma < 1: Brightens.
-    gamma > 1: Darkens.
-    gamma = 1: Identity transformation.
+    gamma < 1 brightens the image.
     """
 
-    image = validate_image(image)
+    validate_image(image)
 
     gamma = float(gamma)
 
     if not np.isfinite(gamma) or gamma <= 0:
-        raise ValueError("Gamma must be a finite positive number.")
+        raise ValueError("Gamma must be a positive finite number.")
 
-    lookup_table = np.array([
-        ((pixel / 255.0) ** gamma) * 255.0
-        for pixel in range(256)
-    ]).clip(0, 255).astype(np.uint8)
+    lookup = np.array(
+        [
+            np.clip(
+                ((pixel / 255.0) ** gamma) * 255.0,
+                0,
+                255
+            )
+            for pixel in range(256)
+        ],
+        dtype=np.uint8
+    )
 
-    return cv2.LUT(image, lookup_table)
+    if image.ndim == 2:
+        return cv2.LUT(image, lookup)
+
+    return cv2.LUT(image, lookup)
 
 
-# =========================================================
+# ============================================================
 # 2. CONTRAST STRETCHING
-# =========================================================
+# ============================================================
 
 def contrast_stretching(image):
     """
     Percentile-based contrast stretching.
 
-    Formula:
-        s = 255 * (r - r_min) / (r_max - r_min)
-
-    Uses the 1st and 99th percentiles.
+    Colour images are processed through LAB luminance instead
+    of stretching B, G and R independently.
     """
 
-    image = validate_image(image)
+    validate_image(image)
 
-    def stretch_channel(channel):
+    luminance, _ = _get_luminance(image)
 
-        lower = np.percentile(channel, 1)
-        upper = np.percentile(channel, 99)
+    low = float(np.percentile(luminance, 1.0))
+    high = float(np.percentile(luminance, 99.0))
 
-        if upper <= lower:
-            return channel.copy()
+    if high - low < 2:
+        return image.copy()
 
-        stretched = (
-            (channel.astype(np.float32) - lower)
-            * 255.0 / (upper - lower)
-        )
+    stretched = (
+        (luminance.astype(np.float32) - low)
+        * (255.0 / (high - low))
+    )
 
-        return np.clip(stretched, 0, 255).astype(np.uint8)
+    stretched = _safe_uint8(stretched)
 
-    if image.ndim == 2:
-        return stretch_channel(image)
-
-    channels = cv2.split(image)
-
-    return cv2.merge([
-        stretch_channel(channel)
-        for channel in channels
-    ])
+    return _restore_luminance(image, stretched)
 
 
-# =========================================================
+# ============================================================
 # 3. HISTOGRAM EQUALIZATION
-# =========================================================
+# ============================================================
 
 def histogram_equalization(image):
     """
-    Global histogram equalization.
+    Histogram equalization on luminance.
 
-    Color images are processed through LAB luminance.
-
-    Formula:
-        s_k = round((L - 1) * CDF(r_k))
+    This avoids independently equalizing colour channels.
     """
 
-    image = validate_image(image)
+    validate_image(image)
 
     if image.ndim == 2:
         return cv2.equalizeHist(image)
 
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
 
-    lightness, a, b = cv2.split(lab)
+    lab[:, :, 0] = cv2.equalizeHist(lab[:, :, 0])
 
-    equalized = cv2.equalizeHist(lightness)
-
-    enhanced_lab = cv2.merge((equalized, a, b))
-
-    return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
-# =========================================================
+# ============================================================
 # 4. CLAHE
-# =========================================================
+# ============================================================
 
 def clahe_enhancement(
     image,
@@ -217,27 +230,25 @@ def clahe_enhancement(
 ):
     """
     Contrast Limited Adaptive Histogram Equalization.
-
-    Parameters:
-        clip_limit: Histogram clipping threshold.
-        tile_grid_size: Number of local regions.
     """
 
-    image = validate_image(image)
+    validate_image(image)
+
+    clip_limit = float(clip_limit)
 
     if clip_limit <= 0:
         raise ValueError("CLAHE clip limit must be positive.")
 
     if (
-        len(tile_grid_size) != 2
-        or tile_grid_size[0] <= 0
-        or tile_grid_size[1] <= 0
+        not isinstance(tile_grid_size, tuple)
+        or len(tile_grid_size) != 2
+        or min(tile_grid_size) < 1
     ):
         raise ValueError("Invalid CLAHE tile grid size.")
 
     clahe = cv2.createCLAHE(
-        clipLimit=float(clip_limit),
-        tileGridSize=tuple(tile_grid_size)
+        clipLimit=clip_limit,
+        tileGridSize=tile_grid_size
     )
 
     if image.ndim == 2:
@@ -245,474 +256,459 @@ def clahe_enhancement(
 
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
 
-    lightness, a, b = cv2.split(lab)
+    lab[:, :, 0] = clahe.apply(lab[:, :, 0])
 
-    enhanced_lightness = clahe.apply(lightness)
-
-    enhanced_lab = cv2.merge((enhanced_lightness, a, b))
-
-    return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
-# =========================================================
+# ============================================================
 # 5. ADAPTIVE GAMMA CORRECTION
-# =========================================================
+# ============================================================
 
 def adaptive_gamma_correction(image):
     """
-    Automatically estimate gamma from average luminance.
+    Adaptive gamma correction based on mean luminance.
 
-    Formula:
-        gamma = log(target) / log(mean_intensity)
-
-        s = 255 * (r / 255)^gamma
-
-    The target mean intensity is 0.5.
-
-    A darker input generally receives a smaller gamma value.
+    The estimated gamma is bounded to prevent extreme
+    brightness changes.
     """
 
-    image = validate_image(image)
+    validate_image(image)
 
-    luminance, color_channels = _get_luminance(image)
+    luminance, _ = _get_luminance(image)
 
-    mean_intensity = float(
-        np.mean(luminance.astype(np.float32)) / 255.0
+    mean_value = float(np.mean(luminance)) / 255.0
+
+    mean_value = float(np.clip(mean_value, 0.01, 0.99))
+
+    gamma = np.log(0.5) / np.log(mean_value)
+
+    gamma = float(np.clip(gamma, 0.35, 1.8))
+
+    enhanced = gamma_correction(image, gamma)
+
+    return enhanced
+
+
+# ============================================================
+# RETINEX SUPPORT
+# ============================================================
+
+def _retinex_channel(channel, sigma):
+    """Calculate a single-scale Retinex response."""
+
+    channel = channel.astype(np.float32) / 255.0
+
+    illumination = cv2.GaussianBlur(
+        channel,
+        (0, 0),
+        sigmaX=float(sigma),
+        sigmaY=float(sigma)
     )
 
-    if mean_intensity <= 0.0:
-        return image.copy()
+    illumination = np.maximum(illumination, 1e-4)
 
-    if mean_intensity >= 1.0:
-        return image.copy()
+    response = (
+        np.log(channel + 1e-4)
+        - np.log(illumination + 1e-4)
+    )
 
-    target = 0.5
+    return response
 
-    gamma = np.log(target) / np.log(mean_intensity)
 
-    gamma = float(np.clip(gamma, 0.25, 1.5))
+def _retinex_enhancement(
+    image,
+    sigmas,
+    strength=0.65
+):
+    """Shared controlled Retinex implementation."""
 
-    lookup_table = np.array([
-        ((pixel / 255.0) ** gamma) * 255.0
-        for pixel in range(256)
-    ]).clip(0, 255).astype(np.uint8)
+    validate_image(image)
 
-    enhanced_luminance = cv2.LUT(luminance, lookup_table)
+    luminance, _ = _get_luminance(image)
+
+    source = luminance.astype(np.float32) / 255.0
+
+    responses = []
+
+    for sigma in sigmas:
+        response = _retinex_channel(
+            luminance,
+            sigma
+        )
+
+        responses.append(response)
+
+    retinex = np.mean(
+        np.stack(responses, axis=0),
+        axis=0
+    )
+
+    normalized = _percentile_normalize(
+        retinex,
+        1.0,
+        99.0
+    )
+
+    # Blend with original luminance to reduce harsh changes.
+    blended = (
+        source * 255.0 * (1.0 - strength)
+        + normalized * strength
+    )
+
+    enhanced_luminance = _safe_uint8(blended)
 
     return _restore_luminance(
-        enhanced_luminance,
-        color_channels
+        image,
+        enhanced_luminance
     )
 
 
-# =========================================================
-# 6. SINGLE-SCALE RETINEX (SSR)
-# =========================================================
+# ============================================================
+# 6. SINGLE-SCALE RETINEX
+# ============================================================
 
 def single_scale_retinex(image, sigma=80.0):
     """
-    Single-Scale Retinex enhancement.
+    Single-Scale Retinex.
 
-    Retinex model:
-        R(x,y) = log(I(x,y)+1) - log(F(x,y)+1)
-
-    F is estimated using Gaussian smoothing.
-
-    sigma controls the illumination estimation scale.
+    Formula:
+        R(x,y) = log(I(x,y)) - log(G(x,y) * I(x,y))
     """
 
-    image = validate_image(image)
+    validate_image(image)
 
     sigma = float(sigma)
 
-    if not np.isfinite(sigma) or sigma <= 0:
+    if sigma <= 0:
         raise ValueError("Retinex sigma must be positive.")
 
-    luminance, color_channels = _get_luminance(image)
-
-    source = luminance.astype(np.float32)
-
-    illumination = cv2.GaussianBlur(
-        source,
-        (0, 0),
-        sigmaX=sigma,
-        sigmaY=sigma,
-        borderType=cv2.BORDER_REFLECT
-    )
-
-    retinex = (
-        np.log1p(source)
-        - np.log1p(illumination)
-    )
-
-    enhanced = _percentile_normalize(retinex)
-
-    return _restore_luminance(
-        enhanced,
-        color_channels
+    return _retinex_enhancement(
+        image,
+        sigmas=(sigma,),
+        strength=0.65
     )
 
 
-# =========================================================
-# 7. MULTI-SCALE RETINEX (MSR)
-# =========================================================
+# ============================================================
+# 7. MULTI-SCALE RETINEX
+# ============================================================
 
 def multi_scale_retinex(
     image,
-    sigmas=(15.0, 80.0, 250.0)
+    sigmas=(15, 80, 250)
 ):
     """
     Multi-Scale Retinex.
 
-    Formula:
-        MSR(x,y) = sum(w_i * SSR_i(x,y))
-
-    Multiple Gaussian scales are combined to estimate
-    illumination at different spatial resolutions.
+    Combines Retinex responses at multiple spatial scales.
     """
 
-    image = validate_image(image)
+    validate_image(image)
 
     if not sigmas:
         raise ValueError("At least one Retinex scale is required.")
 
-    sigmas = tuple(float(s) for s in sigmas)
+    checked_sigmas = tuple(float(s) for s in sigmas)
 
-    if any(not np.isfinite(s) or s <= 0 for s in sigmas):
+    if any(s <= 0 for s in checked_sigmas):
         raise ValueError("All Retinex scales must be positive.")
 
-    luminance, color_channels = _get_luminance(image)
-
-    source = luminance.astype(np.float32)
-
-    result = np.zeros_like(source, dtype=np.float32)
-
-    weight = 1.0 / len(sigmas)
-
-    for sigma in sigmas:
-
-        illumination = cv2.GaussianBlur(
-            source,
-            (0, 0),
-            sigmaX=sigma,
-            sigmaY=sigma,
-            borderType=cv2.BORDER_REFLECT
-        )
-
-        retinex = (
-            np.log1p(source)
-            - np.log1p(illumination)
-        )
-
-        result += weight * retinex
-
-    enhanced = _percentile_normalize(result)
-
-    return _restore_luminance(
-        enhanced,
-        color_channels
+    return _retinex_enhancement(
+        image,
+        sigmas=checked_sigmas,
+        strength=0.60
     )
 
 
-# =========================================================
-# 8. LIME
-# =========================================================
+# ============================================================
+# 8. LIME-STYLE ILLUMINATION ENHANCEMENT
+# ============================================================
 
-def lime_enhancement(image, enhancement_strength=0.8):
+def lime_enhancement(
+    image,
+    enhancement_strength=0.8
+):
     """
-    Classical LIME-style illumination-map enhancement.
+    Simplified LIME-style illumination enhancement.
 
-    Initial illumination estimate:
-        T(x,y) = max(R(x,y), G(x,y), B(x,y))
+    Estimates illumination using the maximum colour channel,
+    smooths the illumination map and applies a bounded gain.
 
-    Enhancement:
-        I_enhanced = I / T^alpha
-
-    The illumination estimate is smoothed using bilateral
-    filtering to reduce local noise in the map.
-
-    This is a simplified LIME-style implementation,
-    not a complete reproduction of the original paper's
-    structure-aware illumination refinement.
+    This is a classical implementation inspired by illumination
+    map enhancement; it is not a claim of exact reproduction
+    of the original LIME research algorithm.
     """
 
-    image = validate_image(image)
+    validate_image(image)
 
-    alpha = float(enhancement_strength)
+    strength = float(enhancement_strength)
 
-    if not np.isfinite(alpha) or not 0.0 <= alpha <= 1.0:
+    if not 0.0 <= strength <= 1.0:
         raise ValueError(
-            "LIME enhancement strength must be between 0 and 1."
+            "Enhancement strength must be between 0 and 1."
         )
 
     if image.ndim == 2:
-        normalized = image.astype(np.float32) / 255.0
+        channels = image.astype(np.float32)[:, :, None]
+    else:
+        channels = image.astype(np.float32)
 
-        illumination = cv2.bilateralFilter(
-            normalized,
-            d=9,
-            sigmaColor=0.1,
-            sigmaSpace=9
-        )
+    illumination = np.max(channels, axis=2)
 
-        illumination = np.maximum(illumination, 0.05)
-
-        enhanced = normalized / np.power(
-            illumination, alpha
-        )
-
-        enhanced = np.clip(enhanced, 0.0, 1.0)
-
-        return (enhanced * 255.0).astype(np.uint8)
-
-    normalized = image.astype(np.float32) / 255.0
-
-    illumination = np.max(normalized, axis=2)
+    illumination = illumination / 255.0
 
     illumination = cv2.bilateralFilter(
-        illumination,
+        illumination.astype(np.float32),
         d=9,
         sigmaColor=0.1,
         sigmaSpace=9
     )
 
-    illumination = np.maximum(illumination, 0.05)
+    illumination = np.maximum(illumination, 0.08)
 
-    enhanced = normalized / np.power(
-        illumination[:, :, np.newaxis],
-        alpha
+    gain = 1.0 / illumination
+
+    # Limit gain to avoid extreme amplification of dark noise.
+    gain = np.clip(gain, 1.0, 4.0)
+
+    if image.ndim == 2:
+        enhanced = image.astype(np.float32) * gain
+    else:
+        enhanced = channels * gain[:, :, None]
+
+    enhanced = _safe_uint8(enhanced)
+
+    # Blend rather than applying the full estimated gain.
+    result = cv2.addWeighted(
+        image,
+        1.0 - strength,
+        enhanced,
+        strength,
+        0
     )
 
-    enhanced = np.clip(enhanced, 0.0, 1.0)
-
-    return (enhanced * 255.0).astype(np.uint8)
+    return _safe_uint8(result)
 
 
-# =========================================================
+# ============================================================
 # 9. HOMOMORPHIC FILTERING
-# =========================================================
+# ============================================================
 
 def homomorphic_filtering(
     image,
     gamma_low=0.5,
     gamma_high=1.5,
-    cutoff=30.0,
+    cutoff=30,
     sharpness=1.0
 ):
     """
-    Homomorphic frequency-domain illumination correction.
+    Homomorphic filtering on image luminance.
 
-    Processing:
-        1. Convert luminance to logarithmic domain.
-        2. Compute the 2D Fourier transform.
-        3. Apply a high-frequency emphasis filter.
-        4. Compute the inverse Fourier transform.
-        5. Exponentiate and normalize the result.
-
-    Filter:
-        H(u,v) = (gamma_high - gamma_low)
-                 * (1 - exp(-sharpness * D^2 / cutoff^2))
-                 + gamma_low
+    Separates low-frequency illumination from high-frequency
+    reflectance using logarithmic and frequency-domain processing.
     """
 
-    image = validate_image(image)
+    validate_image(image)
 
     gamma_low = float(gamma_low)
     gamma_high = float(gamma_high)
     cutoff = float(cutoff)
     sharpness = float(sharpness)
 
-    if not all(np.isfinite(v) for v in (
-        gamma_low, gamma_high, cutoff, sharpness
-    )):
-        raise ValueError("Homomorphic parameters must be finite.")
-
-    if gamma_low < 0 or gamma_high <= gamma_low:
-        raise ValueError("Invalid homomorphic gamma values.")
+    if gamma_low < 0 or gamma_high <= 0:
+        raise ValueError("Invalid homomorphic filter gains.")
 
     if cutoff <= 0 or sharpness <= 0:
         raise ValueError("Cutoff and sharpness must be positive.")
 
-    luminance, color_channels = _get_luminance(image)
+    luminance, _ = _get_luminance(image)
 
-    source = luminance.astype(np.float32)
+    source = luminance.astype(np.float32) / 255.0
 
-    rows, columns = source.shape
+    log_image = np.log1p(source)
 
-    logarithmic = np.log1p(source)
+    rows, cols = log_image.shape
 
-    frequency = np.fft.fftshift(
-        np.fft.fft2(logarithmic)
+    padded = cv2.copyMakeBorder(
+        log_image,
+        0,
+        rows % 2,
+        0,
+        cols % 2,
+        cv2.BORDER_REFLECT
     )
 
-    u = np.arange(rows, dtype=np.float32) - rows / 2.0
-    v = np.arange(columns, dtype=np.float32) - columns / 2.0
+    padded_rows, padded_cols = padded.shape
 
-    V, U = np.meshgrid(v, u)
+    spectrum = np.fft.fft2(padded)
+    spectrum_shifted = np.fft.fftshift(spectrum)
 
-    distance_squared = U ** 2 + V ** 2
+    y, x = np.ogrid[
+        :padded_rows,
+        :padded_cols
+    ]
 
-    filter_mask = (
-        (gamma_high - gamma_low)
-        * (
-            1.0 - np.exp(
-                -sharpness * distance_squared / (cutoff ** 2)
-            )
-        )
-        + gamma_low
+    center_y = padded_rows // 2
+    center_x = padded_cols // 2
+
+    distance_squared = (
+        (y - center_y) ** 2
+        + (x - center_x) ** 2
     )
 
-    filtered_frequency = frequency * filter_mask
+    distance = np.sqrt(distance_squared)
 
-    spatial = np.fft.ifft2(
-        np.fft.ifftshift(filtered_frequency)
+    # Smooth high-pass response.
+    high_pass = 1.0 - np.exp(
+        -sharpness * distance_squared
+        / (2.0 * cutoff ** 2)
     )
 
-    spatial = np.real(spatial)
-
-    restored = np.expm1(
-        np.clip(spatial, -20.0, 20.0)
+    transfer = (
+        gamma_low
+        + (gamma_high - gamma_low) * high_pass
     )
 
-    enhanced = _percentile_normalize(restored)
+    filtered_spectrum = spectrum_shifted * transfer
+
+    inverse = np.fft.ifft2(
+        np.fft.ifftshift(filtered_spectrum)
+    )
+
+    filtered = np.real(inverse)
+
+    filtered = filtered[:rows, :cols]
+
+    reconstructed = np.expm1(
+        np.clip(filtered, -10, 10)
+    )
+
+    reconstructed = _percentile_normalize(
+        reconstructed,
+        1.0,
+        99.0
+    )
+
+    # Avoid excessive changes to the original luminance.
+    reconstructed = _blend_luminance(
+        luminance,
+        reconstructed,
+        0.65
+    )
 
     return _restore_luminance(
-        enhanced,
-        color_channels
+        image,
+        reconstructed
     )
 
 
-# =========================================================
-# ALGORITHM INFORMATION
-# =========================================================
+# ============================================================
+# ALGORITHM REGISTRY
+# ============================================================
 
 ALGORITHMS = {
-
     "gamma": {
         "name": "Gamma Correction",
-        "purpose": "Adjusts image brightness using a nonlinear intensity transformation.",
-        "formula": "s = 255 × (r / 255)^γ",
-        "variables": (
-            "r = Original pixel intensity (0–255)\n"
-            "s = Transformed intensity\n"
-            "γ = Gamma parameter\n"
-            "γ < 1 brightens; γ > 1 darkens."
-        ),
+        "purpose": "Adjusts image brightness using a nonlinear intensity mapping.",
+        "formula": "s = 255 * (r / 255) ^ gamma",
+        "variables": {
+            "gamma": "Controls brightness. Values below 1 brighten the image."
+        },
         "function": gamma_correction
     },
 
     "contrast_stretching": {
         "name": "Contrast Stretching",
-        "purpose": "Expands the image intensity range using percentile-based normalization.",
-        "formula": "s = 255 × (r - r_min) / (r_max - r_min)",
-        "variables": (
-            "r = Original intensity\n"
-            "s = Stretched intensity\n"
-            "r_min = 1st percentile\n"
-            "r_max = 99th percentile."
-        ),
+        "purpose": "Expands the useful luminance range using percentile limits.",
+        "formula": "s = (r - r_low) * 255 / (r_high - r_low)",
+        "variables": {
+            "r_low": "1st percentile of image luminance.",
+            "r_high": "99th percentile of image luminance."
+        },
         "function": contrast_stretching
     },
 
     "histogram_equalization": {
         "name": "Histogram Equalization",
-        "purpose": "Redistributes image intensity values using the cumulative histogram.",
-        "formula": "s_k = round((L - 1) × CDF(r_k))",
-        "variables": (
-            "s_k = Mapped output intensity\n"
-            "L = Number of intensity levels (256)\n"
-            "CDF = Cumulative distribution function\n"
-            "r_k = Original intensity level."
-        ),
+        "purpose": "Redistributes luminance values to improve global contrast.",
+        "formula": "s = (L - 1) * CDF(r)",
+        "variables": {
+            "CDF": "Cumulative distribution function of image intensity.",
+            "L": "Number of intensity levels."
+        },
         "function": histogram_equalization
     },
 
     "clahe": {
         "name": "CLAHE",
-        "purpose": "Improves local contrast while limiting excessive histogram amplification.",
-        "formula": "s_k = round((L - 1) × CDF_clip(r_k))",
-        "variables": (
-            "s_k = Mapped output intensity\n"
-            "L = 256 intensity levels\n"
-            "CDF_clip = Clipped cumulative distribution\n"
-            "Default clip limit = 2.0\n"
-            "Default tile grid = 8 × 8."
-        ),
+        "purpose": "Enhances local contrast with histogram clipping.",
+        "formula": "Local histogram equalization with contrast limiting.",
+        "variables": {
+            "clip_limit": "Limits local histogram amplification.",
+            "tile_grid_size": "Number of contextual regions."
+        },
         "function": clahe_enhancement
     },
 
     "adaptive_gamma": {
         "name": "Adaptive Gamma Correction",
-        "purpose": "Automatically estimates gamma using average image luminance.",
-        "formula": "γ = log(T) / log(μ)",
-        "variables": (
-            "γ = Estimated gamma parameter\n"
-            "T = Target mean intensity (0.5)\n"
-            "μ = Normalized mean luminance\n"
-            "Output = 255 × (r / 255)^γ."
-        ),
+        "purpose": "Selects gamma from average image luminance.",
+        "formula": "gamma = log(0.5) / log(mean_intensity)",
+        "variables": {
+            "mean_intensity": "Normalized average luminance."
+        },
         "function": adaptive_gamma_correction
     },
 
     "ssr": {
-        "name": "Single-Scale Retinex (SSR)",
-        "purpose": "Estimates illumination using one Gaussian scale and enhances reflectance.",
-        "formula": "R(x,y) = log(I+1) - log(F+1)",
-        "variables": (
-            "R = Retinex output\n"
-            "I = Input luminance\n"
-            "F = Gaussian-smoothed illumination\n"
-            "sigma = Gaussian scale (default 80)."
-        ),
+        "name": "Single-Scale Retinex",
+        "purpose": "Estimates reflectance using one Gaussian illumination scale.",
+        "formula": "R(x,y) = log(I(x,y)) - log(G_sigma * I)",
+        "variables": {
+            "sigma": "Gaussian illumination scale."
+        },
         "function": single_scale_retinex
     },
 
     "msr": {
-        "name": "Multi-Scale Retinex (MSR)",
-        "purpose": "Combines Retinex responses at multiple Gaussian scales.",
-        "formula": "MSR(x,y) = Σ w_i × SSR_i(x,y)",
-        "variables": (
-            "MSR = Multi-scale Retinex output\n"
-            "SSR_i = Retinex at scale i\n"
-            "w_i = Scale weight\n"
-            "Default scales = 15, 80, 250."
-        ),
+        "name": "Multi-Scale Retinex",
+        "purpose": "Combines Retinex responses from multiple spatial scales.",
+        "formula": "R = sum(R_sigma) / number_of_scales",
+        "variables": {
+            "sigmas": "Gaussian scales used for illumination estimation."
+        },
         "function": multi_scale_retinex
     },
 
     "lime": {
-        "name": "LIME",
-        "purpose": "Estimates an illumination map and enhances low-light image regions.",
-        "formula": "T = max(R,G,B); I_enhanced = I / T^α",
-        "variables": (
-            "T = Estimated illumination map\n"
-            "R, G, B = Normalized color channels\n"
-            "I = Input image\n"
-            "α = Enhancement strength (default 0.8)."
-        ),
+        "name": "LIME-Style Enhancement",
+        "purpose": "Estimates illumination and applies bounded brightness compensation.",
+        "formula": "Enhanced = Image * illumination_gain",
+        "variables": {
+            "enhancement_strength": "Controls the blending of the enhanced result."
+        },
         "function": lime_enhancement
     },
 
     "homomorphic": {
         "name": "Homomorphic Filtering",
-        "purpose": "Uses frequency-domain filtering to reduce uneven illumination and emphasize details.",
-        "formula": "H(u,v) = (γH-γL)(1-e^(-cD²/D0²))+γL",
-        "variables": (
-            "H = Frequency-domain filter response\n"
-            "γH = High-frequency gain (1.5)\n"
-            "γL = Low-frequency gain (0.5)\n"
-            "D = Distance from frequency origin\n"
-            "D0 = Cutoff frequency (30)\n"
-            "c = Filter sharpness (1.0)."
-        ),
+        "purpose": "Uses frequency-domain filtering to separate illumination and reflectance.",
+        "formula": "H(u,v) = gamma_low + (gamma_high - gamma_low) * HP(u,v)",
+        "variables": {
+            "gamma_low": "Low-frequency gain.",
+            "gamma_high": "High-frequency gain.",
+            "cutoff": "Frequency cutoff.",
+            "sharpness": "Controls the filter transition."
+        },
         "function": homomorphic_filtering
     }
 }
 
 
-# =========================================================
+# ============================================================
 # COMMON ENHANCEMENT INTERFACE
-# =========================================================
+# ============================================================
 
 def apply_enhancement(
     algorithm_key,
@@ -720,45 +716,42 @@ def apply_enhancement(
     gamma=0.6
 ):
     """
-    Apply an enhancement algorithm using a common interface.
+    Apply an algorithm using the common ATHER interface.
 
-    Existing GUI compatibility:
-        apply_enhancement(key, image, gamma)
-
-    Gamma is used only by the Gamma Correction algorithm.
-    Other algorithms use their documented defaults.
+    The interface intentionally remains compatible with the
+    existing GUI and benchmark modules.
     """
+
+    validate_image(image)
 
     if algorithm_key not in ALGORITHMS:
         raise ValueError(
-            f"Unknown enhancement algorithm: {algorithm_key}"
+            f"Unknown algorithm: {algorithm_key}"
         )
 
-    original = validate_image(image)
+    original_shape = image.shape
 
-    function = ALGORITHMS[algorithm_key]["function"]
+    algorithm = ALGORITHMS[algorithm_key]
 
     if algorithm_key == "gamma":
-        result = function(original, gamma)
+        enhanced = algorithm["function"](
+            image,
+            gamma=gamma
+        )
     else:
-        result = function(original)
+        enhanced = algorithm["function"](image)
 
-    if not isinstance(result, np.ndarray):
-        raise RuntimeError("Enhancement did not return a NumPy image.")
-
-    if result.shape != original.shape:
+    if enhanced is None:
         raise RuntimeError(
-            "Enhancement changed the image dimensions."
+            f"{algorithm['name']} returned no image."
         )
 
-    if result.dtype != np.uint8:
+    if enhanced.shape != original_shape:
         raise RuntimeError(
-            "Enhancement returned an unexpected image format."
+            f"{algorithm['name']} changed image dimensions."
         )
 
-    if not np.all(np.isfinite(result)):
-        raise RuntimeError(
-            "Enhancement returned invalid pixel values."
-        )
+    if enhanced.dtype != np.uint8:
+        enhanced = _safe_uint8(enhanced)
 
-    return result
+    return enhanced

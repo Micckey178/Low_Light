@@ -63,101 +63,288 @@ from core.report_generator import generate_ieee_report
 # =========================================================
 
 APP_STYLE = """
-/* ATHER Light Lavender — consistent application-wide theme */
 QMainWindow, QWidget {
-    background: #F7F4FF;
-    color: #261542;
+    background: #100D18;
+    color: #F2ECFA;
     font-family: "Segoe UI";
     font-size: 13px;
 }
-QLabel { background: transparent; color: #302047; }
-QWidget#rootWidget, QWidget#mainColumn, QWidget#contentWidget,
-QWidget#pageStack { background: #F7F4FF; }
+/* QLabel must not inherit the opaque QWidget surface.
+   This prevents the black rectangular strips behind ordinary text. */
+QLabel {
+    background: transparent;
+}
+QWidget#rootWidget, QWidget#mainColumn, QWidget#contentWidget {
+    background: #100D18;
+}
 QFrame#sidebar {
-    background: #F1EBFC;
-    border-right: 1px solid #DED3F1;
+    background: #171222;
+    border-right: 1px solid #40344E;
 }
 QFrame#brandPanel {
-    background: #FFFFFF;
-    border: 1px solid #E2D8F1;
-    border-radius: 16px;
+    background: #211A2E;
+    border: 1px solid #51445F;
+    border-radius: 14px;
 }
 QLabel#brandMark {
-    background: #7C3AED; color: #FFFFFF;
-    border-radius: 12px; font-size: 23px; font-weight: 900;
+    background: #8056D8;
+    color: #F8F4FF;
+    border-radius: 10px;
+    font-size: 23px;
+    font-weight: 900;
 }
-QLabel#brand { color: #32145F; font-size: 22px; font-weight: 900; letter-spacing: 2px; }
-QLabel#brandSubtitle { color: #75658D; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
-QLabel#sidebarEyebrow { color: #8A79A3; font-size: 10px; font-weight: 850; letter-spacing: 1.5px; padding: 7px 9px; }
-QFrame#systemStatusPanel { background: #E9DFFF; border: 1px solid #D3C0F2; border-radius: 12px; }
-QLabel#statusEyebrow { color: #7656A0; font-size: 9px; font-weight: 850; letter-spacing: 1.1px; }
-QLabel#systemStatusText { color: #4C1D95; font-size: 12px; font-weight: 800; }
-QFrame#topbar { background: #FFFFFF; border: none; border-bottom: 1px solid #E4DCF1; }
-QLabel#topbarEyebrow { color: #8B5CF6; font-size: 9px; font-weight: 850; letter-spacing: 1.3px; }
-QLabel#topbarTitle { color: #281342; font-size: 18px; font-weight: 800; }
-QLabel#topbarStatus { color: #4C1D95; background: #F0E8FF; border: 1px solid #D8C6F0; border-radius: 10px; padding: 8px 12px; font-size: 10px; font-weight: 850; letter-spacing: .5px; }
-QFrame#pageIntro { background: #FFFFFF; border: 1px solid #E2D8F1; border-left: 4px solid #8B5CF6; border-radius: 14px; }
-QLabel#pageEyebrow { color: #8B5CF6; font-size: 9px; font-weight: 850; letter-spacing: 1.5px; }
-QLabel#pageTitle { color: #281342; font-size: 25px; font-weight: 850; }
-QLabel#pageSubtitle { color: #75658D; font-size: 12px; }
-QLabel#sectionTitle, QLabel#sectionLabel { color: #6D28D9; font-size: 11px; font-weight: 850; letter-spacing: 1px; }
-QLabel#muted { color: #75658D; }
-QLabel#statValue { color: #6D28D9; font-size: 28px; font-weight: 850; }
+QLabel#brand {
+    color: #F8F4FF;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 2px;
+}
+QLabel#brandSubtitle {
+    color: #B0A5BE;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.1px;
+}
+QLabel#sidebarEyebrow {
+    color: #9A8BAE;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: 1.5px;
+    padding: 7px 9px;
+}
+QFrame#systemStatusPanel {
+    background: #241B35;
+    border: 1px solid #59417D;
+    border-radius: 11px;
+}
+QLabel#statusEyebrow {
+    color: #B7A4D8;
+    font-size: 8px;
+    font-weight: 850;
+    letter-spacing: 1.2px;
+}
+QLabel#systemStatusText {
+    color: #E0D2FA;
+    font-size: 11px;
+    font-weight: 800;
+}
+QFrame#topbar {
+    background: #1B1526;
+    border: none;
+    border-bottom: 1px solid #40344E;
+}
+QLabel#topbarEyebrow {
+    color: #B69AF4;
+    font-size: 8px;
+    font-weight: 850;
+    letter-spacing: 1.4px;
+}
+QLabel#topbarTitle {
+    color: #F1F7F7;
+    font-size: 17px;
+    font-weight: 800;
+}
+QLabel#topbarStatus {
+    color: #E0D2FA;
+    background: #2A1F40;
+    border: 1px solid #59417D;
+    border-radius: 8px;
+    padding: 7px 11px;
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: .7px;
+}
+QFrame#pageIntro {
+    background: #211A2E;
+    border: 1px solid #493B5E;
+    border-left: 3px solid #A78BFA;
+    border-radius: 12px;
+}
+QLabel#pageEyebrow {
+    color: #B69AF4;
+    font-size: 8px;
+    font-weight: 850;
+    letter-spacing: 1.6px;
+}
+QLabel#pageTitle {
+    color: #F0F6F6;
+    font-size: 25px;
+    font-weight: 850;
+}
+QLabel#pageSubtitle {
+    color: #B0A5BE;
+    font-size: 11px;
+}
+QLabel#sectionTitle {
+    color: #C4AEFF;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: 1.2px;
+}
+QLabel#muted { color: #B0A5BE; }
+QLabel#statValue {
+    color: #D0B8FF;
+    font-size: 28px;
+    font-weight: 850;
+}
 QPushButton {
-    background: #6D28D9; color: #FFFFFF; border: 1px solid #7C3AED;
-    border-radius: 10px; padding: 10px 16px; min-height: 20px;
-    font-size: 12px; font-weight: 750;
+    background: #7047C8;
+    color: #F5FFFF;
+    border: 1px solid #9670EA;
+    border-radius: 8px;
+    padding: 10px 15px;
+    min-height: 19px;
+    font-size: 11px;
+    font-weight: 750;
 }
-QPushButton:hover { background: #7C3AED; border-color: #A78BFA; }
-QPushButton:pressed { background: #5420B5; }
-QPushButton:disabled { background: #E7E0EF; color: #A69AB5; border-color: #DED5E9; }
-QPushButton#secondaryButton { background: #F3EEFC; color: #5B318F; border: 1px solid #D8C9EB; }
-QPushButton#secondaryButton:hover { background: #E9DFFF; color: #4C1D95; border-color: #A78BFA; }
+QPushButton:hover {
+    background: #825CE0;
+    border-color: #C5AEFF;
+}
+QPushButton:pressed { background: #5735A5; }
+QPushButton:disabled {
+    background: #30283B;
+    color: #958AA5;
+    border-color: #4A3D59;
+}
+QPushButton#secondaryButton {
+    background: #211A2E;
+    color: #D6C9EF;
+    border: 1px solid #594A70;
+}
+QPushButton#secondaryButton:hover {
+    background: #342746;
+    color: #F5EEFF;
+    border-color: #A78BFA;
+}
 QPushButton#navButton {
-    background: transparent; color: #59466F; border: 1px solid transparent;
-    border-radius: 10px; text-align: left; padding: 13px 15px;
-    min-height: 24px; font-size: 14px; font-weight: 650;
+    background: transparent;
+    color: #B0A5BE;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    text-align: left;
+    padding: 13px 15px;
+    min-height: 24px;
+    font-size: 14px;
+    font-weight: 650;
 }
-QPushButton#navButton:hover { background: #E9DFFF; color: #4C1D95; border-color: #D6C5F0; }
+QPushButton#navButton:hover {
+    background: #302541;
+    color: #F4EDFF;
+    border-color: #594A70;
+}
 QPushButton#navButton[active="true"] {
-    background: #DCCBFF; color: #4C1D95; border: 1px solid #B99BEF;
-    border-left: 4px solid #7C3AED; font-weight: 800;
+    background: #38294F;
+    color: #E5D8FF;
+    border: 1px solid #7656A8;
+    border-left: 3px solid #B69AF4;
+    font-weight: 800;
 }
 QGroupBox {
-    background: #FFFFFF; border: 1px solid #E2D8F1; border-radius: 14px;
-    margin-top: 18px; padding: 17px 14px 13px 14px;
-    color: #4C1D95; font-size: 12px; font-weight: 800;
+    background: #1B1526;
+    border: 1px solid #493B5E;
+    border-radius: 12px;
+    margin-top: 18px;
+    padding: 17px 14px 13px 14px;
+    color: #D8C8F5;
+    font-size: 11px;
+    font-weight: 800;
 }
-QGroupBox::title { subcontrol-origin: margin; left: 13px; padding: 0 8px; color: #6D28D9; }
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 13px;
+    padding: 0 8px;
+    color: #C4AEFF;
+}
 QComboBox, QDoubleSpinBox {
-    background: #FFFFFF; color: #302047; border: 1px solid #D8CBEA;
-    border-radius: 8px; padding: 8px 10px; min-height: 25px;
-    selection-background-color: #7C3AED;
+    background: #211A2E;
+    color: #F2ECFA;
+    border: 1px solid #594A70;
+    border-radius: 7px;
+    padding: 8px 10px;
+    min-height: 25px;
+    selection-background-color: #7047C8;
 }
 QComboBox:hover, QDoubleSpinBox:hover { border-color: #A78BFA; }
-QComboBox:focus, QDoubleSpinBox:focus { border: 1px solid #7C3AED; }
-QComboBox QAbstractItemView { background: #FFFFFF; color: #302047; selection-background-color: #E9DFFF; selection-color: #4C1D95; border: 1px solid #CBB8E8; padding: 5px; }
-QPlainTextEdit { background: #FBF9FF; color: #35244F; border: 1px solid #DED3F1; border-radius: 10px; padding: 11px; font-family: Consolas; font-size: 11px; selection-background-color: #DCCBFF; }
-QTableWidget { background: #FFFFFF; alternate-background-color: #F7F3FF; color: #302047; gridline-color: #E8E0F2; border: 1px solid #DED3F1; border-radius: 10px; selection-background-color: #E5D6FF; selection-color: #4C1D95; outline: 0; }
+QComboBox:focus, QDoubleSpinBox:focus { border: 1px solid #C5AEFF; }
+QComboBox QAbstractItemView {
+    background: #211A2E;
+    color: #F2ECFA;
+    selection-background-color: #493366;
+    selection-color: white;
+    border: 1px solid #7656A8;
+    padding: 5px;
+}
+QPlainTextEdit {
+    background: #151020;
+    color: #D9D0E6;
+    border: 1px solid #51445F;
+    border-radius: 9px;
+    padding: 11px;
+    font-family: Consolas;
+    font-size: 11px;
+    selection-background-color: #493366;
+}
+QTableWidget {
+    background: #151020;
+    alternate-background-color: #211A2E;
+    color: #F2ECFA;
+    gridline-color: #40344E;
+    border: 1px solid #51445F;
+    border-radius: 9px;
+    selection-background-color: #493366;
+    selection-color: #FFFFFF;
+    outline: 0;
+}
 QTableWidget::item { padding: 8px 7px; }
-QTableWidget::item:selected { background: #E5D6FF; }
-QHeaderView::section { background: #F0E8FF; color: #4C1D95; padding: 10px 8px; font-weight: 800; border: none; border-right: 1px solid #E2D8F1; border-bottom: 1px solid #E2D8F1; }
-QCheckBox { color: #35244F; spacing: 9px; padding: 5px; }
+QTableWidget::item:selected { background: #493366; }
+QHeaderView::section {
+    background: #302541;
+    color: #E0D2FA;
+    padding: 10px 8px;
+    font-weight: 800;
+    border: none;
+    border-right: 1px solid #493B5E;
+    border-bottom: 1px solid #493B5E;
+}
+QCheckBox { color: #F2ECFA; spacing: 9px; padding: 5px; }
 QCheckBox::indicator { width: 17px; height: 17px; }
-QCheckBox::indicator:unchecked { background: #FFFFFF; border: 1px solid #B9A9CE; border-radius: 4px; }
-QCheckBox::indicator:checked { background: #7C3AED; border: 1px solid #6D28D9; border-radius: 4px; }
-QScrollArea { background: #F7F4FF; border: none; }
-QScrollArea > QWidget > QWidget { background: #F7F4FF; }
-QScrollBar:vertical { background: #EEE8F7; width: 11px; margin: 2px; border-radius: 5px; }
-QScrollBar::handle:vertical { background: #B9A0E8; min-height: 40px; border-radius: 5px; }
-QScrollBar::handle:vertical:hover { background: #8B5CF6; }
-QScrollBar:horizontal { background: #EEE8F7; height: 11px; margin: 2px; border-radius: 5px; }
-QScrollBar::handle:horizontal { background: #B9A0E8; min-width: 40px; border-radius: 5px; }
-QScrollBar::handle:horizontal:hover { background: #8B5CF6; }
+QCheckBox::indicator:unchecked {
+    background: #211A2E;
+    border: 1px solid #8E7DA5;
+    border-radius: 4px;
+}
+QCheckBox::indicator:checked {
+    background: #7047C8;
+    border: 1px solid #C5AEFF;
+    border-radius: 4px;
+}
+QScrollArea { background: #100D18; border: none; }
+QScrollArea > QWidget > QWidget { background: #100D18; }
+QScrollBar:vertical {
+    background: #1B1526; width: 11px; margin: 2px; border-radius: 5px;
+}
+QScrollBar::handle:vertical {
+    background: #7656A8; min-height: 40px; border-radius: 5px;
+}
+QScrollBar::handle:vertical:hover { background: #B69AF4; }
+QScrollBar:horizontal {
+    background: #1B1526; height: 11px; margin: 2px; border-radius: 5px;
+}
+QScrollBar::handle:horizontal {
+    background: #7656A8; min-width: 40px; border-radius: 5px;
+}
+QScrollBar::handle:horizontal:hover { background: #B69AF4; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
-QDialog { background: #F7F4FF; }
-QToolTip { background: #35204F; color: #FFFFFF; border: 1px solid #A78BFA; padding: 7px 9px; border-radius: 6px; }
+QDialog { background: #151020; }
+QToolTip {
+    background: #342746;
+    color: #FFFFFF;
+    border: 1px solid #A78BFA;
+    padding: 7px 9px;
+    border-radius: 6px;
+}
 """
 
 
@@ -189,10 +376,10 @@ def make_section_label(text):
     label.setWordWrap(True)
     label.setStyleSheet("""
         QLabel#sectionLabel {
-            color: #4C1D95;
+            color: #E8DFFF;
             background: transparent;
             border: none;
-            border-left: 3px solid #8B5CF6;
+            border-left: 3px solid #A78BFA;
             padding: 3px 0 3px 10px;
             font-size: 11px;
             font-weight: 850;
@@ -208,13 +395,13 @@ def make_card(title, value, caption):
     card.setMinimumHeight(116)
     card.setStyleSheet("""
         QFrame#dashboardCard {
-            background: #FFFFFF;
-            border: 1px solid #E2D8F1;
+            background: #211A2E;
+            border: 1px solid #493B5E;
             border-radius: 12px;
         }
         QFrame#dashboardCard:hover {
-            background: #E9DFFF;
-            border: 1px solid #8B5CF6;
+            background: #302541;
+            border: 1px solid #A78BFA;
         }
     """)
     layout = QVBoxLayout(card)
@@ -223,17 +410,17 @@ def make_card(title, value, caption):
 
     heading = QLabel(title.upper())
     heading.setStyleSheet(
-        "color: #6B5A84; font-size: 9px; font-weight: 850; "
+        "color: #A99BBE; font-size: 9px; font-weight: 850; "
         "letter-spacing: 1px; border: none;"
     )
     number = QLabel(value)
     number.setObjectName("statValue")
     number.setStyleSheet(
-        "color: #4C1D95; font-size: 27px; font-weight: 850; border: none;"
+        "color: #D0B8FF; font-size: 27px; font-weight: 850; border: none;"
     )
     description = QLabel(caption)
     description.setStyleSheet(
-        "color: #716487; font-size: 9px; border: none;"
+        "color: #B0A5BE; font-size: 9px; border: none;"
     )
     description.setWordWrap(True)
     layout.addWidget(heading)
@@ -250,9 +437,9 @@ def make_preview_label(text, minimum_height=230):
         QSizePolicy.Policy.Expanding
     )
     label.setStyleSheet("""
-        background: #FCFAFF;
-        color: #716487;
-        border: 1px dashed #8B5CF6;
+        background: #151020;
+        color: #B0A5BE;
+        border: 1px dashed #7656A8;
         border-radius: 10px;
         padding: 12px;
     """)
@@ -265,7 +452,7 @@ def make_preview_label(text, minimum_height=230):
 class HistogramCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None):
-        self.figure = Figure(figsize=(8, 3.2), facecolor="#FFFFFF")
+        self.figure = Figure(figsize=(8, 3.2), facecolor="#1B1526")
         self.ax = self.figure.add_subplot(111)
 
         super().__init__(self.figure)
@@ -278,15 +465,15 @@ class HistogramCanvas(FigureCanvasQTAgg):
         self.style_axes()
 
     def style_axes(self):
-        self.figure.patch.set_facecolor("#FFFFFF")
-        self.ax.set_facecolor("#FFFFFF")
-        self.ax.tick_params(colors="#716487")
-        self.ax.xaxis.label.set_color("#716487")
-        self.ax.yaxis.label.set_color("#716487")
-        self.ax.title.set_color("#4C1D95")
+        self.figure.patch.set_facecolor("#1B1526")
+        self.ax.set_facecolor("#1B1526")
+        self.ax.tick_params(colors="#B0A5BE")
+        self.ax.xaxis.label.set_color("#B0A5BE")
+        self.ax.yaxis.label.set_color("#B0A5BE")
+        self.ax.title.set_color("#D8C8F5")
 
         for spine in self.ax.spines.values():
-            spine.set_color("#E2D8F1")
+            spine.set_color("#493B5E")
 
     def plot_histograms(self, image):
         self.ax.clear()
@@ -297,7 +484,7 @@ class HistogramCanvas(FigureCanvasQTAgg):
                 0.5, 0.5,
                 "Load or enhance an image to view its histogram",
                 ha="center", va="center",
-                color="#716487",
+                color="#B0A5BE",
                 transform=self.ax.transAxes,
                 fontsize=10
             )
@@ -313,14 +500,14 @@ class HistogramCanvas(FigureCanvasQTAgg):
                 image.ravel(),
                 bins=256,
                 range=(0, 256),
-                color="#7C3AED",
+                color="#B69AF4",
                 alpha=0.85
             )
             self.ax.set_title("Grayscale Intensity Distribution")
         else:
             for channel, color, label in zip(
                 cv2.split(image),
-                ("#8B5CF6", "#8B5CF6", "#4C1D95"),
+                ("#9670EA", "#A78BFA", "#D8C8F5"),
                 ("Blue", "Green", "Red")
             ):
                 self.ax.hist(
@@ -334,16 +521,16 @@ class HistogramCanvas(FigureCanvasQTAgg):
 
             self.ax.set_title("RGB Intensity Distribution")
             legend = self.ax.legend(
-                facecolor="#E9DFFF",
-                edgecolor="#E2D8F1"
+                facecolor="#302541",
+                edgecolor="#493B5E"
             )
             for item in legend.get_texts():
-                item.set_color("#261542")
+                item.set_color("#F2ECFA")
 
         self.ax.set_xlabel("Pixel Intensity")
         self.ax.set_ylabel("Number of Pixels")
         self.ax.set_xlim(0, 255)
-        self.ax.grid(alpha=0.15, color="#D5C5E9")
+        self.ax.grid(alpha=0.15, color="#594A70")
 
         self.style_axes()
         self.figure.tight_layout()
@@ -357,7 +544,7 @@ class HistogramCanvas(FigureCanvasQTAgg):
 class BenchmarkCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None):
-        self.figure = Figure(figsize=(9, 3.5), facecolor="#FFFFFF")
+        self.figure = Figure(figsize=(9, 3.5), facecolor="#1B1526")
         self.ax = self.figure.add_subplot(111)
 
         super().__init__(self.figure)
@@ -370,15 +557,15 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
         self.style_axes()
 
     def style_axes(self):
-        self.figure.patch.set_facecolor("#FFFFFF")
-        self.ax.set_facecolor("#FFFFFF")
-        self.ax.tick_params(colors="#716487")
-        self.ax.xaxis.label.set_color("#716487")
-        self.ax.yaxis.label.set_color("#716487")
-        self.ax.title.set_color("#4C1D95")
+        self.figure.patch.set_facecolor("#1B1526")
+        self.ax.set_facecolor("#1B1526")
+        self.ax.tick_params(colors="#B0A5BE")
+        self.ax.xaxis.label.set_color("#B0A5BE")
+        self.ax.yaxis.label.set_color("#B0A5BE")
+        self.ax.title.set_color("#D8C8F5")
 
         for spine in self.ax.spines.values():
-            spine.set_color("#E2D8F1")
+            spine.set_color("#493B5E")
 
     def plot_results(self, results, metric, title, ylabel):
         self.ax.clear()
@@ -402,8 +589,8 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
         bars = self.ax.bar(
             names,
             values,
-            color="#6D28D9",
-            edgecolor="#6D28D9",
+            color="#7047C8",
+            edgecolor="#C5AEFF",
             linewidth=0.7
         )
 
@@ -420,7 +607,7 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
                 ha="center",
                 va="bottom",
                 fontsize=7,
-                color="#261542"
+                color="#F2ECFA"
             )
 
         self.style_axes()
@@ -728,9 +915,9 @@ class ATHERApp(QMainWindow):
         hero.setObjectName("dashboardHero")
         hero.setStyleSheet("""
             QFrame#dashboardHero {
-                background-color: #F1EBFF;
-                border: 1px solid #D5C5E9;
-                border-left: 5px solid #7C3AED;
+                background-color: #211A2E;
+                border: 1px solid #594A70;
+                border-left: 5px solid #B69AF4;
                 border-radius: 15px;
             }
         """)
@@ -743,7 +930,7 @@ class ATHERApp(QMainWindow):
             "Classical Image Enhancement Laboratory"
         )
         hero_title.setStyleSheet(
-            "color: #261542; font-size: 22px; font-weight: 850; "
+            "color: #F2ECFA; font-size: 22px; font-weight: 850; "
             "border: none;"
         )
         hero_title.setWordWrap(True)
@@ -755,7 +942,7 @@ class ATHERApp(QMainWindow):
             "for detailed analysis, benchmarking and reporting."
         )
         hero_description.setStyleSheet(
-            "color: #716487; font-size: 12px; border: none;"
+            "color: #B0A5BE; font-size: 12px; border: none;"
         )
         hero_description.setWordWrap(True)
 
@@ -763,7 +950,7 @@ class ATHERApp(QMainWindow):
             "CLASSICAL IMAGE PROCESSING  •  CPU-BASED  •  NO AI / ML"
         )
         hero_note.setStyleSheet(
-            "color: #6D28D9; font-size: 10px; font-weight: 800; "
+            "color: #C4AEFF; font-size: 10px; font-weight: 800; "
             "letter-spacing: 1px; border: none;"
         )
 
@@ -821,7 +1008,7 @@ class ATHERApp(QMainWindow):
         )
         dashboard_description.setWordWrap(True)
         dashboard_description.setStyleSheet(
-            "color: #716487; font-size: 11px;"
+            "color: #B0A5BE; font-size: 11px;"
         )
         dashboard_lab_layout.addWidget(dashboard_description)
 
@@ -968,7 +1155,7 @@ class ATHERApp(QMainWindow):
         )
         self.dashboard_method_information.setWordWrap(True)
         self.dashboard_method_information.setStyleSheet(
-            "color: #716487; font-size: 11px;"
+            "color: #B0A5BE; font-size: 11px;"
         )
         dashboard_lab_layout.addWidget(
             self.dashboard_method_information
@@ -988,7 +1175,7 @@ class ATHERApp(QMainWindow):
 
         self.dashboard_current_image = QLabel("No image loaded")
         self.dashboard_current_image.setStyleSheet(
-            "color: #4C1D95; font-weight: 600;"
+            "color: #E8DFFF; font-weight: 600;"
         )
         self.dashboard_current_image.setWordWrap(True)
         session_layout.addWidget(
@@ -1003,7 +1190,7 @@ class ATHERApp(QMainWindow):
             "Waiting for input"
         )
         self.dashboard_processing_state.setStyleSheet(
-            "color: #6D28D9; font-weight: 600;"
+            "color: #C4AEFF; font-weight: 600;"
         )
         session_layout.addWidget(
             self.dashboard_processing_state, 1, 1
@@ -1015,7 +1202,7 @@ class ATHERApp(QMainWindow):
 
         self.dashboard_image_dimensions = QLabel("Not available")
         self.dashboard_image_dimensions.setStyleSheet(
-            "color: #4C1D95; font-weight: 600;"
+            "color: #E8DFFF; font-weight: 600;"
         )
         session_layout.addWidget(
             self.dashboard_image_dimensions, 2, 1
@@ -1057,8 +1244,8 @@ class ATHERApp(QMainWindow):
             step_card = QFrame()
             step_card.setStyleSheet("""
                 QFrame {
-                    background-color: #E9DFFF;
-                    border: 1px solid #E2D8F1;
+                    background-color: #302541;
+                    border: 1px solid #493B5E;
                     border-radius: 9px;
                 }
             """)
@@ -1069,7 +1256,7 @@ class ATHERApp(QMainWindow):
 
             step_heading = QLabel(heading)
             step_heading.setStyleSheet(
-                "color: #4C1D95; font-weight: 800; "
+                "color: #D8C8F5; font-weight: 800; "
                 "font-size: 11px; border: none;"
             )
 
@@ -1077,7 +1264,7 @@ class ATHERApp(QMainWindow):
             step_description.setWordWrap(True)
             step_description.setMinimumHeight(42)
             step_description.setStyleSheet(
-                "color: #716487; font-size: 11px; border: none;"
+                "color: #B0A5BE; font-size: 11px; border: none;"
             )
 
             step_button = QPushButton(button_text)
@@ -1316,14 +1503,14 @@ class ATHERApp(QMainWindow):
             "ORIGINAL: Waiting for image"
         )
         self.analysis_original_status.setStyleSheet(
-            "color: #6D28D9; font-weight: 700;"
+            "color: #C4AEFF; font-weight: 700;"
         )
 
         self.analysis_enhanced_status = QLabel(
             "ENHANCED: No enhanced output"
         )
         self.analysis_enhanced_status.setStyleSheet(
-            "color: #716487; font-weight: 700;"
+            "color: #B0A5BE; font-weight: 700;"
         )
 
         status_layout.addWidget(self.analysis_original_status)
@@ -1343,7 +1530,7 @@ class ATHERApp(QMainWindow):
         )
         metrics_description.setWordWrap(True)
         metrics_description.setStyleSheet(
-            "color: #716487; font-size: 11px;"
+            "color: #B0A5BE; font-size: 11px;"
         )
         metrics_layout.addWidget(metrics_description)
 
@@ -1673,7 +1860,7 @@ class ATHERApp(QMainWindow):
             "algorithms. Only checked algorithms will be included."
         )
         description.setWordWrap(True)
-        description.setStyleSheet("color: #716487;")
+        description.setStyleSheet("color: #B0A5BE;")
         selection_layout.addWidget(description)
 
         selection_buttons = QHBoxLayout()
@@ -1714,7 +1901,7 @@ class ATHERApp(QMainWindow):
             "Selected algorithms: 0"
         )
         self.report_selection_count.setStyleSheet(
-            "color: #4C1D95; font-weight: bold;"
+            "color: #D8C8F5; font-weight: bold;"
         )
         selection_layout.addWidget(self.report_selection_count)
 
@@ -1801,11 +1988,11 @@ class ATHERApp(QMainWindow):
 
         if not selected:
             self.report_selection_count.setStyleSheet(
-                "color: #8B5CF6; font-weight: bold;"
+                "color: #F59E9B; font-weight: bold;"
             )
         else:
             self.report_selection_count.setStyleSheet(
-                "color: #4C1D95; font-weight: bold;"
+                "color: #D8C8F5; font-weight: bold;"
             )
 
         can_generate = bool(self.benchmark_results) and bool(selected)
@@ -2030,9 +2217,26 @@ class ATHERApp(QMainWindow):
         self.formula_label.setText(
             details.get("formula", "No formula description available.")
         )
-        self.variables_label.setText(
-            details.get("variables", "No variable description available.")
+        variables = details.get(
+            "variables", "No variable description available."
         )
+
+        # Algorithm metadata may provide variables as a dictionary.
+        # QLabel.setText() requires a string, so format each entry
+        # into a readable multi-line description before displaying it.
+        if isinstance(variables, dict):
+            variables_text = "\n".join(
+                f"{str(name).replace('_', ' ').title()}: {description}"
+                for name, description in variables.items()
+            )
+        elif isinstance(variables, (list, tuple, set)):
+            variables_text = "\n".join(
+                str(item) for item in variables
+            )
+        else:
+            variables_text = str(variables)
+
+        self.variables_label.setText(variables_text)
 
         try:
             source = inspect.getsource(details["function"])
