@@ -57,6 +57,11 @@ from core.enhancement import ALGORITHMS, apply_enhancement
 from core.performance import benchmark_algorithm
 from core.report_generator import generate_ieee_report
 from core.adaptive_engine import build_processing_plan, ENGINE_VERSION as ACP_ENGINE_VERSION
+from core.processing_evaluation import (
+    evaluate_components,
+    ENGINE_VERSION as EVALUATION_ENGINE_VERSION,
+    AVAILABLE_COMPONENTS,
+)
 from core.acp_validation import validate_real_image_plan
 
 
@@ -65,288 +70,101 @@ from core.acp_validation import validate_real_image_plan
 # =========================================================
 
 APP_STYLE = """
+/* ATHER Light Lavender — consistent application-wide theme */
 QMainWindow, QWidget {
-    background: #100D18;
-    color: #F2ECFA;
+    background: #F7F4FF;
+    color: #261542;
     font-family: "Segoe UI";
     font-size: 13px;
 }
-/* QLabel must not inherit the opaque QWidget surface.
-   This prevents the black rectangular strips behind ordinary text. */
-QLabel {
-    background: transparent;
-}
-QWidget#rootWidget, QWidget#mainColumn, QWidget#contentWidget {
-    background: #100D18;
-}
+QLabel { background: transparent; color: #302047; }
+QWidget#rootWidget, QWidget#mainColumn, QWidget#contentWidget,
+QWidget#pageStack { background: #F7F4FF; }
 QFrame#sidebar {
-    background: #171222;
-    border-right: 1px solid #40344E;
+    background: #F1EBFC;
+    border-right: 1px solid #DED3F1;
 }
 QFrame#brandPanel {
-    background: #211A2E;
-    border: 1px solid #51445F;
-    border-radius: 14px;
+    background: #FFFFFF;
+    border: 1px solid #E2D8F1;
+    border-radius: 16px;
 }
 QLabel#brandMark {
-    background: #8056D8;
-    color: #F8F4FF;
-    border-radius: 10px;
-    font-size: 23px;
-    font-weight: 900;
+    background: #7C3AED; color: #FFFFFF;
+    border-radius: 12px; font-size: 23px; font-weight: 900;
 }
-QLabel#brand {
-    color: #F8F4FF;
-    font-size: 22px;
-    font-weight: 900;
-    letter-spacing: 2px;
-}
-QLabel#brandSubtitle {
-    color: #B0A5BE;
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 1.1px;
-}
-QLabel#sidebarEyebrow {
-    color: #9A8BAE;
-    font-size: 10px;
-    font-weight: 850;
-    letter-spacing: 1.5px;
-    padding: 7px 9px;
-}
-QFrame#systemStatusPanel {
-    background: #241B35;
-    border: 1px solid #59417D;
-    border-radius: 11px;
-}
-QLabel#statusEyebrow {
-    color: #B7A4D8;
-    font-size: 8px;
-    font-weight: 850;
-    letter-spacing: 1.2px;
-}
-QLabel#systemStatusText {
-    color: #E0D2FA;
-    font-size: 11px;
-    font-weight: 800;
-}
-QFrame#topbar {
-    background: #1B1526;
-    border: none;
-    border-bottom: 1px solid #40344E;
-}
-QLabel#topbarEyebrow {
-    color: #B69AF4;
-    font-size: 8px;
-    font-weight: 850;
-    letter-spacing: 1.4px;
-}
-QLabel#topbarTitle {
-    color: #F1F7F7;
-    font-size: 17px;
-    font-weight: 800;
-}
-QLabel#topbarStatus {
-    color: #E0D2FA;
-    background: #2A1F40;
-    border: 1px solid #59417D;
-    border-radius: 8px;
-    padding: 7px 11px;
-    font-size: 9px;
-    font-weight: 850;
-    letter-spacing: .7px;
-}
-QFrame#pageIntro {
-    background: #211A2E;
-    border: 1px solid #493B5E;
-    border-left: 3px solid #A78BFA;
-    border-radius: 12px;
-}
-QLabel#pageEyebrow {
-    color: #B69AF4;
-    font-size: 8px;
-    font-weight: 850;
-    letter-spacing: 1.6px;
-}
-QLabel#pageTitle {
-    color: #F0F6F6;
-    font-size: 25px;
-    font-weight: 850;
-}
-QLabel#pageSubtitle {
-    color: #B0A5BE;
-    font-size: 11px;
-}
-QLabel#sectionTitle {
-    color: #C4AEFF;
-    font-size: 10px;
-    font-weight: 850;
-    letter-spacing: 1.2px;
-}
-QLabel#muted { color: #B0A5BE; }
-QLabel#statValue {
-    color: #D0B8FF;
-    font-size: 28px;
-    font-weight: 850;
-}
+QLabel#brand { color: #32145F; font-size: 22px; font-weight: 900; letter-spacing: 2px; }
+QLabel#brandSubtitle { color: #75658D; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+QLabel#sidebarEyebrow { color: #8A79A3; font-size: 10px; font-weight: 850; letter-spacing: 1.5px; padding: 7px 9px; }
+QFrame#systemStatusPanel { background: #E9DFFF; border: 1px solid #D3C0F2; border-radius: 12px; }
+QLabel#statusEyebrow { color: #7656A0; font-size: 9px; font-weight: 850; letter-spacing: 1.1px; }
+QLabel#systemStatusText { color: #4C1D95; font-size: 12px; font-weight: 800; }
+QFrame#topbar { background: #FFFFFF; border: none; border-bottom: 1px solid #E4DCF1; }
+QLabel#topbarEyebrow { color: #8B5CF6; font-size: 9px; font-weight: 850; letter-spacing: 1.3px; }
+QLabel#topbarTitle { color: #281342; font-size: 18px; font-weight: 800; }
+QLabel#topbarStatus { color: #4C1D95; background: #F0E8FF; border: 1px solid #D8C6F0; border-radius: 10px; padding: 8px 12px; font-size: 10px; font-weight: 850; letter-spacing: .5px; }
+QFrame#pageIntro { background: #FFFFFF; border: 1px solid #E2D8F1; border-left: 4px solid #8B5CF6; border-radius: 14px; }
+QLabel#pageEyebrow { color: #8B5CF6; font-size: 9px; font-weight: 850; letter-spacing: 1.5px; }
+QLabel#pageTitle { color: #281342; font-size: 25px; font-weight: 850; }
+QLabel#pageSubtitle { color: #75658D; font-size: 12px; }
+QLabel#sectionTitle, QLabel#sectionLabel { color: #6D28D9; font-size: 11px; font-weight: 850; letter-spacing: 1px; }
+QLabel#muted { color: #75658D; }
+QLabel#statValue { color: #6D28D9; font-size: 28px; font-weight: 850; }
 QPushButton {
-    background: #7047C8;
-    color: #F5FFFF;
-    border: 1px solid #9670EA;
-    border-radius: 8px;
-    padding: 10px 15px;
-    min-height: 19px;
-    font-size: 11px;
-    font-weight: 750;
+    background: #6D28D9; color: #FFFFFF; border: 1px solid #7C3AED;
+    border-radius: 10px; padding: 10px 16px; min-height: 20px;
+    font-size: 12px; font-weight: 750;
 }
-QPushButton:hover {
-    background: #825CE0;
-    border-color: #C5AEFF;
-}
-QPushButton:pressed { background: #5735A5; }
-QPushButton:disabled {
-    background: #30283B;
-    color: #958AA5;
-    border-color: #4A3D59;
-}
-QPushButton#secondaryButton {
-    background: #211A2E;
-    color: #D6C9EF;
-    border: 1px solid #594A70;
-}
-QPushButton#secondaryButton:hover {
-    background: #342746;
-    color: #F5EEFF;
-    border-color: #A78BFA;
-}
+QPushButton:hover { background: #7C3AED; border-color: #A78BFA; }
+QPushButton:pressed { background: #5420B5; }
+QPushButton:disabled { background: #E7E0EF; color: #A69AB5; border-color: #DED5E9; }
+QPushButton#secondaryButton { background: #F3EEFC; color: #5B318F; border: 1px solid #D8C9EB; }
+QPushButton#secondaryButton:hover { background: #E9DFFF; color: #4C1D95; border-color: #A78BFA; }
 QPushButton#navButton {
-    background: transparent;
-    color: #B0A5BE;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    text-align: left;
-    padding: 13px 15px;
-    min-height: 24px;
-    font-size: 14px;
-    font-weight: 650;
+    background: transparent; color: #59466F; border: 1px solid transparent;
+    border-radius: 10px; text-align: left; padding: 13px 15px;
+    min-height: 24px; font-size: 14px; font-weight: 650;
 }
-QPushButton#navButton:hover {
-    background: #302541;
-    color: #F4EDFF;
-    border-color: #594A70;
-}
+QPushButton#navButton:hover { background: #E9DFFF; color: #4C1D95; border-color: #D6C5F0; }
 QPushButton#navButton[active="true"] {
-    background: #38294F;
-    color: #E5D8FF;
-    border: 1px solid #7656A8;
-    border-left: 3px solid #B69AF4;
-    font-weight: 800;
+    background: #DCCBFF; color: #4C1D95; border: 1px solid #B99BEF;
+    border-left: 4px solid #7C3AED; font-weight: 800;
 }
 QGroupBox {
-    background: #1B1526;
-    border: 1px solid #493B5E;
-    border-radius: 12px;
-    margin-top: 18px;
-    padding: 17px 14px 13px 14px;
-    color: #D8C8F5;
-    font-size: 11px;
-    font-weight: 800;
+    background: #FFFFFF; border: 1px solid #E2D8F1; border-radius: 14px;
+    margin-top: 18px; padding: 17px 14px 13px 14px;
+    color: #4C1D95; font-size: 12px; font-weight: 800;
 }
-QGroupBox::title {
-    subcontrol-origin: margin;
-    left: 13px;
-    padding: 0 8px;
-    color: #C4AEFF;
-}
+QGroupBox::title { subcontrol-origin: margin; left: 13px; padding: 0 8px; color: #6D28D9; }
 QComboBox, QDoubleSpinBox {
-    background: #211A2E;
-    color: #F2ECFA;
-    border: 1px solid #594A70;
-    border-radius: 7px;
-    padding: 8px 10px;
-    min-height: 25px;
-    selection-background-color: #7047C8;
+    background: #FFFFFF; color: #302047; border: 1px solid #D8CBEA;
+    border-radius: 8px; padding: 8px 10px; min-height: 25px;
+    selection-background-color: #7C3AED;
 }
 QComboBox:hover, QDoubleSpinBox:hover { border-color: #A78BFA; }
-QComboBox:focus, QDoubleSpinBox:focus { border: 1px solid #C5AEFF; }
-QComboBox QAbstractItemView {
-    background: #211A2E;
-    color: #F2ECFA;
-    selection-background-color: #493366;
-    selection-color: white;
-    border: 1px solid #7656A8;
-    padding: 5px;
-}
-QPlainTextEdit {
-    background: #151020;
-    color: #D9D0E6;
-    border: 1px solid #51445F;
-    border-radius: 9px;
-    padding: 11px;
-    font-family: Consolas;
-    font-size: 11px;
-    selection-background-color: #493366;
-}
-QTableWidget {
-    background: #151020;
-    alternate-background-color: #211A2E;
-    color: #F2ECFA;
-    gridline-color: #40344E;
-    border: 1px solid #51445F;
-    border-radius: 9px;
-    selection-background-color: #493366;
-    selection-color: #FFFFFF;
-    outline: 0;
-}
+QComboBox:focus, QDoubleSpinBox:focus { border: 1px solid #7C3AED; }
+QComboBox QAbstractItemView { background: #FFFFFF; color: #302047; selection-background-color: #E9DFFF; selection-color: #4C1D95; border: 1px solid #CBB8E8; padding: 5px; }
+QPlainTextEdit { background: #FBF9FF; color: #35244F; border: 1px solid #DED3F1; border-radius: 10px; padding: 11px; font-family: Consolas; font-size: 11px; selection-background-color: #DCCBFF; }
+QTableWidget { background: #FFFFFF; alternate-background-color: #F7F3FF; color: #302047; gridline-color: #E8E0F2; border: 1px solid #DED3F1; border-radius: 10px; selection-background-color: #E5D6FF; selection-color: #4C1D95; outline: 0; }
 QTableWidget::item { padding: 8px 7px; }
-QTableWidget::item:selected { background: #493366; }
-QHeaderView::section {
-    background: #302541;
-    color: #E0D2FA;
-    padding: 10px 8px;
-    font-weight: 800;
-    border: none;
-    border-right: 1px solid #493B5E;
-    border-bottom: 1px solid #493B5E;
-}
-QCheckBox { color: #F2ECFA; spacing: 9px; padding: 5px; }
+QTableWidget::item:selected { background: #E5D6FF; }
+QHeaderView::section { background: #F0E8FF; color: #4C1D95; padding: 10px 8px; font-weight: 800; border: none; border-right: 1px solid #E2D8F1; border-bottom: 1px solid #E2D8F1; }
+QCheckBox { color: #35244F; spacing: 9px; padding: 5px; }
 QCheckBox::indicator { width: 17px; height: 17px; }
-QCheckBox::indicator:unchecked {
-    background: #211A2E;
-    border: 1px solid #8E7DA5;
-    border-radius: 4px;
-}
-QCheckBox::indicator:checked {
-    background: #7047C8;
-    border: 1px solid #C5AEFF;
-    border-radius: 4px;
-}
-QScrollArea { background: #100D18; border: none; }
-QScrollArea > QWidget > QWidget { background: #100D18; }
-QScrollBar:vertical {
-    background: #1B1526; width: 11px; margin: 2px; border-radius: 5px;
-}
-QScrollBar::handle:vertical {
-    background: #7656A8; min-height: 40px; border-radius: 5px;
-}
-QScrollBar::handle:vertical:hover { background: #B69AF4; }
-QScrollBar:horizontal {
-    background: #1B1526; height: 11px; margin: 2px; border-radius: 5px;
-}
-QScrollBar::handle:horizontal {
-    background: #7656A8; min-width: 40px; border-radius: 5px;
-}
-QScrollBar::handle:horizontal:hover { background: #B69AF4; }
+QCheckBox::indicator:unchecked { background: #FFFFFF; border: 1px solid #B9A9CE; border-radius: 4px; }
+QCheckBox::indicator:checked { background: #7C3AED; border: 1px solid #6D28D9; border-radius: 4px; }
+QScrollArea { background: #F7F4FF; border: none; }
+QScrollArea > QWidget > QWidget { background: #F7F4FF; }
+QScrollBar:vertical { background: #EEE8F7; width: 11px; margin: 2px; border-radius: 5px; }
+QScrollBar::handle:vertical { background: #B9A0E8; min-height: 40px; border-radius: 5px; }
+QScrollBar::handle:vertical:hover { background: #8B5CF6; }
+QScrollBar:horizontal { background: #EEE8F7; height: 11px; margin: 2px; border-radius: 5px; }
+QScrollBar::handle:horizontal { background: #B9A0E8; min-width: 40px; border-radius: 5px; }
+QScrollBar::handle:horizontal:hover { background: #8B5CF6; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
-QDialog { background: #151020; }
-QToolTip {
-    background: #342746;
-    color: #FFFFFF;
-    border: 1px solid #A78BFA;
-    padding: 7px 9px;
-    border-radius: 6px;
-}
+QDialog { background: #F7F4FF; }
+QToolTip { background: #35204F; color: #FFFFFF; border: 1px solid #A78BFA; padding: 7px 9px; border-radius: 6px; }
 """
 
 
@@ -378,7 +196,7 @@ def make_section_label(text):
     label.setWordWrap(True)
     label.setStyleSheet("""
         QLabel#sectionLabel {
-            color: #E8DFFF;
+            color: #4C1D95;
             background: transparent;
             border: none;
             border-left: 3px solid #A78BFA;
@@ -397,12 +215,12 @@ def make_card(title, value, caption):
     card.setMinimumHeight(116)
     card.setStyleSheet("""
         QFrame#dashboardCard {
-            background: #211A2E;
-            border: 1px solid #493B5E;
+            background: #FFFFFF;
+            border: 1px solid #E2D8F1;
             border-radius: 12px;
         }
         QFrame#dashboardCard:hover {
-            background: #302541;
+            background: #F3EEFC;
             border: 1px solid #A78BFA;
         }
     """)
@@ -412,17 +230,17 @@ def make_card(title, value, caption):
 
     heading = QLabel(title.upper())
     heading.setStyleSheet(
-        "color: #A99BBE; font-size: 9px; font-weight: 850; "
+        "color: #8A79A3; font-size: 9px; font-weight: 850; "
         "letter-spacing: 1px; border: none;"
     )
     number = QLabel(value)
     number.setObjectName("statValue")
     number.setStyleSheet(
-        "color: #D0B8FF; font-size: 27px; font-weight: 850; border: none;"
+        "color: #6D28D9; font-size: 27px; font-weight: 850; border: none;"
     )
     description = QLabel(caption)
     description.setStyleSheet(
-        "color: #B0A5BE; font-size: 9px; border: none;"
+        "color: #75658D; font-size: 9px; border: none;"
     )
     description.setWordWrap(True)
     layout.addWidget(heading)
@@ -439,9 +257,9 @@ def make_preview_label(text, minimum_height=230):
         QSizePolicy.Policy.Expanding
     )
     label.setStyleSheet("""
-        background: #151020;
-        color: #B0A5BE;
-        border: 1px dashed #7656A8;
+        background: #FBF9FF;
+        color: #75658D;
+        border: 1px dashed #B9A0E8;
         border-radius: 10px;
         padding: 12px;
     """)
@@ -454,7 +272,7 @@ def make_preview_label(text, minimum_height=230):
 class HistogramCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None):
-        self.figure = Figure(figsize=(8, 3.2), facecolor="#1B1526")
+        self.figure = Figure(figsize=(8, 3.2), facecolor="#FFFFFF")
         self.ax = self.figure.add_subplot(111)
 
         super().__init__(self.figure)
@@ -467,15 +285,15 @@ class HistogramCanvas(FigureCanvasQTAgg):
         self.style_axes()
 
     def style_axes(self):
-        self.figure.patch.set_facecolor("#1B1526")
-        self.ax.set_facecolor("#1B1526")
-        self.ax.tick_params(colors="#B0A5BE")
-        self.ax.xaxis.label.set_color("#B0A5BE")
-        self.ax.yaxis.label.set_color("#B0A5BE")
-        self.ax.title.set_color("#D8C8F5")
+        self.figure.patch.set_facecolor("#FFFFFF")
+        self.ax.set_facecolor("#FFFFFF")
+        self.ax.tick_params(colors="#75658D")
+        self.ax.xaxis.label.set_color("#75658D")
+        self.ax.yaxis.label.set_color("#75658D")
+        self.ax.title.set_color("#4C1D95")
 
         for spine in self.ax.spines.values():
-            spine.set_color("#493B5E")
+            spine.set_color("#E2D8F1")
 
     def plot_histograms(self, image):
         self.ax.clear()
@@ -486,7 +304,7 @@ class HistogramCanvas(FigureCanvasQTAgg):
                 0.5, 0.5,
                 "Load or enhance an image to view its histogram",
                 ha="center", va="center",
-                color="#B0A5BE",
+                color="#75658D",
                 transform=self.ax.transAxes,
                 fontsize=10
             )
@@ -502,14 +320,14 @@ class HistogramCanvas(FigureCanvasQTAgg):
                 image.ravel(),
                 bins=256,
                 range=(0, 256),
-                color="#B69AF4",
+                color="#8B5CF6",
                 alpha=0.85
             )
             self.ax.set_title("Grayscale Intensity Distribution")
         else:
             for channel, color, label in zip(
                 cv2.split(image),
-                ("#9670EA", "#A78BFA", "#D8C8F5"),
+                ("#8B5CF6", "#A78BFA", "#4C1D95"),
                 ("Blue", "Green", "Red")
             ):
                 self.ax.hist(
@@ -523,16 +341,16 @@ class HistogramCanvas(FigureCanvasQTAgg):
 
             self.ax.set_title("RGB Intensity Distribution")
             legend = self.ax.legend(
-                facecolor="#302541",
-                edgecolor="#493B5E"
+                facecolor="#F3EEFC",
+                edgecolor="#E2D8F1"
             )
             for item in legend.get_texts():
-                item.set_color("#F2ECFA")
+                item.set_color("#261542")
 
         self.ax.set_xlabel("Pixel Intensity")
         self.ax.set_ylabel("Number of Pixels")
         self.ax.set_xlim(0, 255)
-        self.ax.grid(alpha=0.15, color="#594A70")
+        self.ax.grid(alpha=0.15, color="#D8CBEA")
 
         self.style_axes()
         self.figure.tight_layout()
@@ -546,7 +364,7 @@ class HistogramCanvas(FigureCanvasQTAgg):
 class BenchmarkCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None):
-        self.figure = Figure(figsize=(9, 3.5), facecolor="#1B1526")
+        self.figure = Figure(figsize=(9, 3.5), facecolor="#FFFFFF")
         self.ax = self.figure.add_subplot(111)
 
         super().__init__(self.figure)
@@ -559,15 +377,15 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
         self.style_axes()
 
     def style_axes(self):
-        self.figure.patch.set_facecolor("#1B1526")
-        self.ax.set_facecolor("#1B1526")
-        self.ax.tick_params(colors="#B0A5BE")
-        self.ax.xaxis.label.set_color("#B0A5BE")
-        self.ax.yaxis.label.set_color("#B0A5BE")
-        self.ax.title.set_color("#D8C8F5")
+        self.figure.patch.set_facecolor("#FFFFFF")
+        self.ax.set_facecolor("#FFFFFF")
+        self.ax.tick_params(colors="#75658D")
+        self.ax.xaxis.label.set_color("#75658D")
+        self.ax.yaxis.label.set_color("#75658D")
+        self.ax.title.set_color("#4C1D95")
 
         for spine in self.ax.spines.values():
-            spine.set_color("#493B5E")
+            spine.set_color("#E2D8F1")
 
     def plot_results(self, results, metric, title, ylabel):
         self.ax.clear()
@@ -591,8 +409,8 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
         bars = self.ax.bar(
             names,
             values,
-            color="#7047C8",
-            edgecolor="#C5AEFF",
+            color="#6D28D9",
+            edgecolor="#A78BFA",
             linewidth=0.7
         )
 
@@ -609,7 +427,7 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
                 ha="center",
                 va="bottom",
                 fontsize=7,
-                color="#F2ECFA"
+                color="#261542"
             )
 
         self.style_axes()
@@ -644,6 +462,8 @@ class ATHERApp(QMainWindow):
         self.last_report_path = None
         self.default_gamma = 0.6
         self.acp_plan = None
+        self.processing_evaluation_result = None
+        self.processing_evaluation_image = None
 
         self.navigation_buttons = {}
         self.page_indices = {}
@@ -745,7 +565,7 @@ class ATHERApp(QMainWindow):
         brand_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand = QLabel("ATHER")
         brand.setObjectName("brand")
-        brand_subtitle = QLabel("IMAGE RESEARCH WORKSTATION")
+        brand_subtitle = QLabel("CLASSICAL IMAGE LAB")
         brand_subtitle.setObjectName("brandSubtitle")
 
         brand_row = QHBoxLayout()
@@ -768,7 +588,7 @@ class ATHERApp(QMainWindow):
             ("Dashboard", "dashboard"),
             ("Image Workspace", "workspace"),
             ("Enhancement Lab", "enhancement"),
-            ("Image Analysis", "analysis"),
+            ("Image Analysis & Evaluation", "analysis"),
             ("Adaptive Processing (ACP)", "acp"),
             ("Algorithm Lab", "algorithms"),
             ("Benchmark Lab", "benchmark"),
@@ -809,7 +629,7 @@ class ATHERApp(QMainWindow):
         status_layout = QVBoxLayout(status_panel)
         status_layout.setContentsMargins(12, 12, 12, 12)
         status_layout.setSpacing(5)
-        status_heading = QLabel("LOCAL PROCESSING")
+        status_heading = QLabel("WORKSPACE STATUS")
         status_heading.setObjectName("statusEyebrow")
         self.sidebar_status = QLabel("●  SYSTEM READY")
         self.sidebar_status.setObjectName("systemStatusText")
@@ -860,6 +680,7 @@ class ATHERApp(QMainWindow):
         self.build_workspace()
         self.build_enhancement_lab()
         self.build_analysis()
+        self.build_processing_evaluation_page()
         self.build_acp_page()
         self.build_algorithm_lab()
         self.build_benchmark_lab()
@@ -878,7 +699,7 @@ class ATHERApp(QMainWindow):
             "dashboard": "Dashboard",
             "workspace": "Image Workspace",
             "enhancement": "Enhancement Lab",
-            "analysis": "Image Analysis",
+            "analysis": "Image Analysis & Evaluation",
             "acp": "Adaptive Processing (ACP)",
             "algorithms": "Algorithm Lab",
             "benchmark": "Benchmark Lab",
@@ -921,9 +742,9 @@ class ATHERApp(QMainWindow):
         hero.setObjectName("dashboardHero")
         hero.setStyleSheet("""
             QFrame#dashboardHero {
-                background-color: #211A2E;
-                border: 1px solid #594A70;
-                border-left: 5px solid #B69AF4;
+                background-color: #FFFFFF;
+                border: 1px solid #D8CBEA;
+                border-left: 5px solid #8B5CF6;
                 border-radius: 15px;
             }
         """)
@@ -936,7 +757,7 @@ class ATHERApp(QMainWindow):
             "Classical Image Enhancement Laboratory"
         )
         hero_title.setStyleSheet(
-            "color: #F2ECFA; font-size: 22px; font-weight: 850; "
+            "color: #261542; font-size: 22px; font-weight: 850; "
             "border: none;"
         )
         hero_title.setWordWrap(True)
@@ -948,7 +769,7 @@ class ATHERApp(QMainWindow):
             "for detailed analysis, benchmarking and reporting."
         )
         hero_description.setStyleSheet(
-            "color: #B0A5BE; font-size: 12px; border: none;"
+            "color: #75658D; font-size: 12px; border: none;"
         )
         hero_description.setWordWrap(True)
 
@@ -956,7 +777,7 @@ class ATHERApp(QMainWindow):
             "CLASSICAL IMAGE PROCESSING  •  CPU-BASED  •  NO AI / ML"
         )
         hero_note.setStyleSheet(
-            "color: #C4AEFF; font-size: 10px; font-weight: 800; "
+            "color: #6D28D9; font-size: 10px; font-weight: 800; "
             "letter-spacing: 1px; border: none;"
         )
 
@@ -1014,7 +835,7 @@ class ATHERApp(QMainWindow):
         )
         dashboard_description.setWordWrap(True)
         dashboard_description.setStyleSheet(
-            "color: #B0A5BE; font-size: 11px;"
+            "color: #75658D; font-size: 11px;"
         )
         dashboard_lab_layout.addWidget(dashboard_description)
 
@@ -1168,7 +989,7 @@ class ATHERApp(QMainWindow):
         )
         self.dashboard_method_information.setWordWrap(True)
         self.dashboard_method_information.setStyleSheet(
-            "color: #B0A5BE; font-size: 11px;"
+            "color: #75658D; font-size: 11px;"
         )
         dashboard_lab_layout.addWidget(
             self.dashboard_method_information
@@ -1188,7 +1009,7 @@ class ATHERApp(QMainWindow):
 
         self.dashboard_current_image = QLabel("No image loaded")
         self.dashboard_current_image.setStyleSheet(
-            "color: #E8DFFF; font-weight: 600;"
+            "color: #4C1D95; font-weight: 600;"
         )
         self.dashboard_current_image.setWordWrap(True)
         session_layout.addWidget(
@@ -1203,7 +1024,7 @@ class ATHERApp(QMainWindow):
             "Waiting for input"
         )
         self.dashboard_processing_state.setStyleSheet(
-            "color: #C4AEFF; font-weight: 600;"
+            "color: #6D28D9; font-weight: 600;"
         )
         session_layout.addWidget(
             self.dashboard_processing_state, 1, 1
@@ -1215,7 +1036,7 @@ class ATHERApp(QMainWindow):
 
         self.dashboard_image_dimensions = QLabel("Not available")
         self.dashboard_image_dimensions.setStyleSheet(
-            "color: #E8DFFF; font-weight: 600;"
+            "color: #4C1D95; font-weight: 600;"
         )
         session_layout.addWidget(
             self.dashboard_image_dimensions, 2, 1
@@ -1257,8 +1078,8 @@ class ATHERApp(QMainWindow):
             step_card = QFrame()
             step_card.setStyleSheet("""
                 QFrame {
-                    background-color: #302541;
-                    border: 1px solid #493B5E;
+                    background-color: #F3EEFC;
+                    border: 1px solid #E2D8F1;
                     border-radius: 9px;
                 }
             """)
@@ -1269,7 +1090,7 @@ class ATHERApp(QMainWindow):
 
             step_heading = QLabel(heading)
             step_heading.setStyleSheet(
-                "color: #D8C8F5; font-weight: 800; "
+                "color: #4C1D95; font-weight: 800; "
                 "font-size: 11px; border: none;"
             )
 
@@ -1277,7 +1098,7 @@ class ATHERApp(QMainWindow):
             step_description.setWordWrap(True)
             step_description.setMinimumHeight(42)
             step_description.setStyleSheet(
-                "color: #B0A5BE; font-size: 11px; border: none;"
+                "color: #75658D; font-size: 11px; border: none;"
             )
 
             step_button = QPushButton(button_text)
@@ -1504,10 +1325,13 @@ class ATHERApp(QMainWindow):
 
     def build_analysis(self):
         page, layout = self.create_page(
-            "Image Analysis & Comparison",
-            "Compare the original image with its enhanced output using "
-            "measurable image properties and intensity distributions."
+            "Image Analysis & Processing Evaluation",
+            "A unified workspace to inspect image properties, compare "
+            "original and enhanced results, evaluate classical processing "
+            "components, and review their measured effects."
         )
+        self.analysis_page = page
+        self.analysis_content_layout = layout
 
         status_group = QGroupBox("Analysis Overview")
         status_layout = QHBoxLayout(status_group)
@@ -1516,14 +1340,14 @@ class ATHERApp(QMainWindow):
             "ORIGINAL: Waiting for image"
         )
         self.analysis_original_status.setStyleSheet(
-            "color: #C4AEFF; font-weight: 700;"
+            "color: #6D28D9; font-weight: 700;"
         )
 
         self.analysis_enhanced_status = QLabel(
             "ENHANCED: No enhanced output"
         )
         self.analysis_enhanced_status.setStyleSheet(
-            "color: #B0A5BE; font-weight: 700;"
+            "color: #75658D; font-weight: 700;"
         )
 
         status_layout.addWidget(self.analysis_original_status)
@@ -1543,7 +1367,7 @@ class ATHERApp(QMainWindow):
         )
         metrics_description.setWordWrap(True)
         metrics_description.setStyleSheet(
-            "color: #B0A5BE; font-size: 11px;"
+            "color: #75658D; font-size: 11px;"
         )
         metrics_layout.addWidget(metrics_description)
 
@@ -1639,7 +1463,6 @@ class ATHERApp(QMainWindow):
         )
         layout.addWidget(enhanced_histogram_group)
 
-        layout.addStretch()
         self.add_page("analysis", page)
 
     # =====================================================
@@ -1691,7 +1514,7 @@ class ATHERApp(QMainWindow):
         )
         self.acp_status_label.setWordWrap(True)
         self.acp_status_label.setStyleSheet(
-            "color: #B69AF4; font-weight: 700; padding: 5px 0;"
+            "color: #8B5CF6; font-weight: 700; padding: 5px 0;"
         )
         layout.addWidget(self.acp_status_label)
 
@@ -2037,6 +1860,359 @@ class ATHERApp(QMainWindow):
         self.navigate("enhancement")
 
     # =====================================================
+    # PHASE 3.2: UNIVERSAL PROCESSING EVALUATION
+    # =====================================================
+
+    def build_processing_evaluation_page(self):
+        # Processing Evaluation is intentionally part of Image Analysis.
+        # Both stages use the same currently loaded source photograph.
+        layout = self.analysis_content_layout
+        layout.addSpacing(10)
+        layout.addWidget(make_section_label("Classical Processing Evaluation"))
+
+        intro = QLabel(
+            f"Evaluation engine v{EVALUATION_ENGINE_VERSION}. Select one or "
+            "more classical components, then evaluate the current original "
+            "image. The source image remains unchanged. Results include "
+            "no-reference measurements and per-component processing time."
+        )
+        intro.setWordWrap(True)
+        intro.setObjectName("muted")
+        layout.addWidget(intro)
+
+        selection_group = QGroupBox("Processing Components")
+        selection_layout = QVBoxLayout(selection_group)
+        selection_note = QLabel(
+            "Choose any combination. Components are applied in the order "
+            "shown below; chroma preservation uses the original image as "
+            "its colour reference."
+        )
+        selection_note.setWordWrap(True)
+        selection_note.setObjectName("muted")
+        selection_layout.addWidget(selection_note)
+
+        component_grid = QGridLayout()
+        self.evaluation_component_checks = {}
+        component_options = [
+            ("denoising", "Edge-aware denoising"),
+            ("illumination", "Illumination correction"),
+            ("sharpening", "Edge-preserving sharpening"),
+            ("chroma_preservation", "Original chroma preservation"),
+        ]
+        for index, (key, label_text) in enumerate(component_options):
+            check = QCheckBox(label_text)
+            check.setChecked(True)
+            self.evaluation_component_checks[key] = check
+            component_grid.addWidget(check, index // 2, index % 2)
+        selection_layout.addLayout(component_grid)
+
+        action_row = QHBoxLayout()
+        self.processing_evaluate_button = QPushButton(
+            "Evaluate Current Image"
+        )
+        self.processing_evaluate_button.clicked.connect(
+            self.run_processing_evaluation
+        )
+        self.processing_evaluate_button.setEnabled(False)
+        action_row.addWidget(self.processing_evaluate_button)
+
+        self.processing_evaluation_status = QLabel(
+            "Load or capture an image in the Image Workspace to begin."
+        )
+        self.processing_evaluation_status.setWordWrap(True)
+        self.processing_evaluation_status.setObjectName("muted")
+        action_row.addWidget(self.processing_evaluation_status, 1)
+        selection_layout.addLayout(action_row)
+        layout.addWidget(selection_group)
+
+        metrics_group = QGroupBox("Original vs. Final Measurements")
+        metrics_layout = QVBoxLayout(metrics_group)
+        metrics_note = QLabel(
+            "These are image measurements, not ground-truth quality scores. "
+            "PSNR and SSIM are intentionally omitted because this workflow "
+            "does not have a reference ground-truth image."
+        )
+        metrics_note.setWordWrap(True)
+        metrics_note.setObjectName("muted")
+        metrics_layout.addWidget(metrics_note)
+
+        self.processing_metrics_table = QTableWidget(0, 3)
+        self.processing_metrics_table.setHorizontalHeaderLabels([
+            "Metric", "Original", "Processed"
+        ])
+        self.processing_metrics_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.processing_metrics_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.processing_metrics_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.processing_metrics_table.verticalHeader().setVisible(False)
+        self.processing_metrics_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.processing_metrics_table.setAlternatingRowColors(True)
+        self.processing_metrics_table.setMinimumHeight(270)
+        metrics_layout.addWidget(self.processing_metrics_table)
+        layout.addWidget(metrics_group)
+
+        preview_group = QGroupBox("Evaluation Output")
+        preview_layout = QVBoxLayout(preview_group)
+        self.processing_evaluation_preview = make_preview_label(
+            "The evaluated image will appear here", 300
+        )
+        preview_layout.addWidget(self.processing_evaluation_preview)
+        self.processing_evaluation_save_button = QPushButton(
+            "Save Evaluated Image"
+        )
+        self.processing_evaluation_save_button.setObjectName(
+            "secondaryButton"
+        )
+        self.processing_evaluation_save_button.clicked.connect(
+            self.save_processing_evaluation_image
+        )
+        self.processing_evaluation_save_button.setEnabled(False)
+        preview_layout.addWidget(
+            self.processing_evaluation_save_button,
+            alignment=Qt.AlignmentFlag.AlignRight
+        )
+        layout.addWidget(preview_group)
+
+        details_group = QGroupBox("Per-Component Evaluation Details")
+        details_layout = QVBoxLayout(details_group)
+        self.processing_evaluation_details = QPlainTextEdit()
+        self.processing_evaluation_details.setReadOnly(True)
+        self.processing_evaluation_details.setMinimumHeight(220)
+        self.processing_evaluation_details.setPlaceholderText(
+            "Run an evaluation to inspect component timings, metric changes, "
+            "warnings and interpretation notes."
+        )
+        details_layout.addWidget(self.processing_evaluation_details)
+        layout.addWidget(details_group)
+
+        layout.addStretch(1)
+
+    @staticmethod
+    def _format_evaluation_value(value):
+        if value is None:
+            return "—"
+        if isinstance(value, (float, np.floating)):
+            return f"{float(value):.4f}"
+        if isinstance(value, (int, np.integer)):
+            return f"{int(value):,}"
+        return str(value)
+
+    def run_processing_evaluation(self):
+        """Evaluate selected Phase 3.1 components on ATHER's loaded image."""
+        if self.original_image is None:
+            QMessageBox.information(
+                self,
+                "No Image Loaded",
+                "Upload or capture an image in ATHER before running evaluation."
+            )
+            return
+
+        selected = [
+            key for key, checkbox in self.evaluation_component_checks.items()
+            if checkbox.isChecked()
+        ]
+        if not selected:
+            QMessageBox.information(
+                self,
+                "Select a Component",
+                "Choose at least one processing component to evaluate."
+            )
+            return
+
+        self.processing_evaluate_button.setEnabled(False)
+        self.processing_evaluation_status.setText(
+            "Evaluating the currently loaded image..."
+        )
+        self.status_label_update("Running processing evaluation")
+        QApplication.processEvents()
+
+        try:
+            # The evaluation engine receives the in-memory image from ATHER.
+            # It never reads a hard-coded path and must not mutate this source.
+            result = evaluate_components(
+                self.original_image.copy(),
+                selected_components=selected
+            )
+
+            final_image = result.get("final_image")
+            if final_image is None:
+                raise RuntimeError(
+                    "The evaluation engine did not return a final image."
+                )
+
+            self.processing_evaluation_result = result
+            self.processing_evaluation_image = final_image.copy()
+            self.display_image(
+                self.processing_evaluation_image,
+                self.processing_evaluation_preview
+            )
+            self.processing_evaluation_save_button.setEnabled(True)
+
+            original_metrics = result.get("original_metrics", {})
+            final_metrics = result.get("final_metrics", {})
+            metric_rows = [
+                ("Brightness", "brightness"),
+                ("Contrast (standard deviation)", "contrast"),
+                ("Dynamic range", "dynamic_range"),
+                ("Entropy", "entropy"),
+                ("Sharpness (Laplacian variance)", "sharpness"),
+                ("Estimated noise proxy", "noise_proxy"),
+                ("Width (pixels)", "width"),
+                ("Height (pixels)", "height"),
+                ("Channels", "channels"),
+                ("Mean saturation", "saturation"),
+                ("Mean LAB chroma", "chroma"),
+            ]
+            self.processing_metrics_table.setRowCount(len(metric_rows))
+            for row, (label, key) in enumerate(metric_rows):
+                values = (
+                    label,
+                    self._format_evaluation_value(original_metrics.get(key)),
+                    self._format_evaluation_value(final_metrics.get(key)),
+                )
+                for column, value in enumerate(values):
+                    add_table_item(
+                        self.processing_metrics_table, row, column, value
+                    )
+
+            steps = result.get("steps", [])
+            total_time = result.get(
+                "total_processing_time_ms",
+                result.get("total_time_ms")
+            )
+            if total_time is None:
+                total_time = sum(
+                    float(step.get("processing_time_ms", 0.0))
+                    for step in steps
+                )
+
+            lines = [
+                f"Evaluation engine: v{EVALUATION_ENGINE_VERSION}",
+                f"Selected components: {', '.join(selected)}",
+                f"Total processing time: {float(total_time):.3f} ms",
+                f"Input dimensions: {self.original_image.shape[1]} × "
+                f"{self.original_image.shape[0]}",
+                "",
+                "COMPONENT-BY-COMPONENT RESULTS",
+                "=" * 48,
+            ]
+            for index, step in enumerate(steps, start=1):
+                component = step.get(
+                    "component_name",
+                    step.get("component", step.get("name", f"Component {index}"))
+                )
+                step_time = step.get("processing_time_ms", 0.0)
+                lines.extend([
+                    f"{index}. {str(component).replace('_', ' ').title()}",
+                    f"   Processing time: {float(step_time):.3f} ms",
+                ])
+                step_metrics = step.get("metrics", {})
+                if step_metrics:
+                    lines.append("   Measurements after this step:")
+                    for key in (
+                        "brightness", "contrast", "dynamic_range",
+                        "entropy", "sharpness", "noise_proxy"
+                    ):
+                        if key in step_metrics:
+                            lines.append(
+                                f"      {key.replace('_', ' ').title()}: "
+                                f"{self._format_evaluation_value(step_metrics[key])}"
+                            )
+                changes = step.get(
+                    "changes_from_original",
+                    step.get("metric_changes", {})
+                )
+                if changes:
+                    lines.append("   Change relative to original:")
+                    for key, value in changes.items():
+                        lines.append(
+                            f"      {str(key).replace('_', ' ').title()}: "
+                            f"{self._format_evaluation_value(value)}"
+                        )
+                lines.append("")
+
+            warnings = result.get("warnings", [])
+            notes = result.get(
+                "evaluation_notes",
+                result.get("notes", [])
+            )
+            if warnings:
+                lines.extend(["WARNINGS", "=" * 48])
+                lines.extend(f"• {warning}" for warning in warnings)
+                lines.append("")
+            if notes:
+                lines.extend(["EVALUATION NOTES", "=" * 48])
+                if isinstance(notes, (list, tuple)):
+                    lines.extend(f"• {note}" for note in notes)
+                else:
+                    lines.append(str(notes))
+
+            self.processing_evaluation_details.setPlainText("\n".join(lines))
+            self.processing_evaluation_status.setText(
+                f"Evaluation complete — {len(steps)} component(s), "
+                f"{float(total_time):.3f} ms total."
+            )
+            self.status_label_update("Processing evaluation complete")
+
+        except Exception as exc:
+            self.processing_evaluation_status.setText(
+                "Evaluation failed. See the error details."
+            )
+            QMessageBox.critical(
+                self,
+                "Processing Evaluation Failed",
+                f"The current image could not be evaluated.\n\n{exc}"
+            )
+            self.status_label_update("Processing evaluation failed")
+        finally:
+            self.processing_evaluate_button.setEnabled(
+                self.original_image is not None
+            )
+
+    def save_processing_evaluation_image(self):
+        if self.processing_evaluation_image is None:
+            return
+
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save Evaluated Image",
+            "ATHER_evaluated.png",
+            "PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;TIFF Image (*.tif *.tiff)"
+        )
+        if not path:
+            return
+
+        if not Path(path).suffix:
+            if "JPEG" in selected_filter:
+                path += ".jpg"
+            elif "TIFF" in selected_filter:
+                path += ".tif"
+            else:
+                path += ".png"
+
+        try:
+            if not cv2.imwrite(path, self.processing_evaluation_image):
+                raise OSError("OpenCV could not write the selected output file.")
+            QMessageBox.information(
+                self,
+                "Image Saved",
+                f"Evaluated image saved successfully:\n{path}"
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Save Failed",
+                f"Could not save the evaluated image.\n\n{exc}"
+            )
+
+    # =====================================================
     # ALGORITHM LAB - SEPARATE SIDEBAR SECTION
     # =====================================================
 
@@ -2267,7 +2443,7 @@ class ATHERApp(QMainWindow):
             "algorithms. Only checked algorithms will be included."
         )
         description.setWordWrap(True)
-        description.setStyleSheet("color: #B0A5BE;")
+        description.setStyleSheet("color: #75658D;")
         selection_layout.addWidget(description)
 
         selection_buttons = QHBoxLayout()
@@ -2308,7 +2484,7 @@ class ATHERApp(QMainWindow):
             "Selected algorithms: 0"
         )
         self.report_selection_count.setStyleSheet(
-            "color: #D8C8F5; font-weight: bold;"
+            "color: #4C1D95; font-weight: bold;"
         )
         selection_layout.addWidget(self.report_selection_count)
 
@@ -2399,7 +2575,7 @@ class ATHERApp(QMainWindow):
             )
         else:
             self.report_selection_count.setStyleSheet(
-                "color: #D8C8F5; font-weight: bold;"
+                "color: #4C1D95; font-weight: bold;"
             )
 
         can_generate = bool(self.benchmark_results) and bool(selected)
@@ -2856,6 +3032,22 @@ class ATHERApp(QMainWindow):
 
         self.benchmark_results = []
         self.last_report_path = None
+        self.processing_evaluation_result = None
+        self.processing_evaluation_image = None
+
+        if hasattr(self, "processing_evaluation_status"):
+            self.processing_evaluation_status.setText(
+                "Image changed. Run evaluation on the newly loaded image."
+            )
+            self.processing_evaluation_status.setEnabled(True)
+            self.processing_evaluate_button.setEnabled(True)
+            self.processing_evaluation_save_button.setEnabled(False)
+            self.processing_evaluation_preview.clear()
+            self.processing_evaluation_preview.setText(
+                "The evaluated image will appear here"
+            )
+            self.processing_metrics_table.setRowCount(0)
+            self.processing_evaluation_details.clear()
 
         filename = Path(path).name if path else "Webcam Captured Image"
 
