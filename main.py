@@ -28,6 +28,7 @@ import os
 import platform
 import tempfile
 import inspect
+import time
 
 from pathlib import Path
 from datetime import datetime
@@ -54,6 +55,8 @@ from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt, QTimer
 
 from core.enhancement import ALGORITHMS, apply_enhancement
+from core import adaptive_engine as adaptive_engine_module
+from core import advanced_processing as advanced_processing_module
 from core.performance import benchmark_algorithm
 from core.report_generator import generate_ieee_report
 from core.adaptive_engine import build_processing_plan, ENGINE_VERSION as ACP_ENGINE_VERSION
@@ -464,6 +467,7 @@ class ATHERApp(QMainWindow):
         self.acp_plan = None
         self.processing_evaluation_result = None
         self.processing_evaluation_image = None
+        self.processing_journey_steps = []
 
         self.navigation_buttons = {}
         self.page_indices = {}
@@ -590,6 +594,7 @@ class ATHERApp(QMainWindow):
             ("Enhancement Lab", "enhancement"),
             ("Image Analysis & Evaluation", "analysis"),
             ("Adaptive Processing (ACP)", "acp"),
+            ("Processing Journey", "journey"),
             ("Algorithm Lab", "algorithms"),
             ("Benchmark Lab", "benchmark"),
             ("Research Reports", "reports"),
@@ -681,6 +686,7 @@ class ATHERApp(QMainWindow):
         self.build_enhancement_lab()
         self.build_analysis()
         self.build_processing_evaluation_page()
+        self.build_processing_journey_page()
         self.build_acp_page()
         self.build_algorithm_lab()
         self.build_benchmark_lab()
@@ -701,6 +707,7 @@ class ATHERApp(QMainWindow):
             "enhancement": "Enhancement Lab",
             "analysis": "Image Analysis & Evaluation",
             "acp": "Adaptive Processing (ACP)",
+            "journey": "Processing Journey",
             "algorithms": "Algorithm Lab",
             "benchmark": "Benchmark Lab",
             "reports": "Research Reports",
@@ -1810,6 +1817,39 @@ class ATHERApp(QMainWindow):
             )
 
             self.acp_plan = plan
+            active_conditions = classification.get("active_conditions", [])
+            recommendation_names = [
+                item.get("algorithm_name", item.get("algorithm_key", "Unknown"))
+                for item in recommendations
+            ]
+            acp_code = "\n\n".join(
+                self._journey_source(getattr(adaptive_engine_module, name, None))
+                for name in (
+                    "analyze_image", "classify_image_conditions",
+                    "recommend_algorithms", "build_processing_plan"
+                )
+            )
+            self.record_processing_journey_step(
+                "Adaptive Classical Processing analysis (ACP)",
+                "ACP measured the current image and generated a recommendation plan. "
+                "It did not modify the source pixels or automatically execute an algorithm.",
+                formula="Deterministic image statistics and rule-based condition thresholds; recommendation scores are calculated by ACP rules.",
+                method=f"ATHER-ACP v{ACP_ENGINE_VERSION}: image analysis, condition classification and recommendation ranking",
+                parameters="Recommendation-only mode; the user remains in control of algorithm execution.",
+                input_details=f"Current source image: {image_info['width']} × {image_info['height']} pixels; mean luminance {luminance['mean']:.3f}; estimated noise proxy {noise['noise_estimate_proxy']:.3f}.",
+                output_details=(
+                    "Active conditions: " + (", ".join(active_conditions) if active_conditions else "none detected") +
+                    ". Recommendations: " + (", ".join(recommendation_names) if recommendation_names else "none; manual selection remains available") + "."
+                ),
+                measurements={
+                    "mean_luminance": float(luminance["mean"]),
+                    "luminance_stddev": float(luminance["standard_deviation"]),
+                    "dark_pixel_fraction_pct": float(dark_percent),
+                    "noise_proxy": float(noise["noise_estimate_proxy"]),
+                },
+                code=acp_code,
+                image=self.original_image
+            )
             intent = classification.get(
                 "exposure_interpretation", "not_assessed"
             ).replace("_", " ").title()
@@ -1994,6 +2034,232 @@ class ATHERApp(QMainWindow):
 
         layout.addStretch(1)
 
+    # =====================================================
+    # PROCESSING JOURNEY — EXPLAINABLE EXECUTION HISTORY
+    # =====================================================
+
+    def build_processing_journey_page(self):
+        page, layout = self.create_page(
+            "Processing Journey",
+            "Follow the actual path taken by your image, from input and ACP analysis "
+            "through the selected classical operations to the measured output. "
+            "Expand any stage to inspect its mathematics, parameters and Python source."
+        )
+
+        intro = QGroupBox("How to read this journey")
+        intro_layout = QVBoxLayout(intro)
+        note = QLabel(
+            "Only operations that ATHER actually records during this session are shown. "
+            "The simple explanation stays visible; use the technical-details control "
+            "to inspect formulas, measured values and implementation code. Actual "
+            "source, component-output and final images are shown when the processing "
+            "operation returns those image arrays; no illustrative images are invented."
+        )
+        note.setWordWrap(True)
+        note.setObjectName("muted")
+        intro_layout.addWidget(note)
+        layout.addWidget(intro)
+
+        self.journey_status_label = QLabel(
+            "Load or capture an image to begin recording its processing journey."
+        )
+        self.journey_status_label.setWordWrap(True)
+        self.journey_status_label.setObjectName("muted")
+        layout.addWidget(self.journey_status_label)
+
+        self.processing_journey_content = QWidget()
+        self.processing_journey_content.setObjectName("journeyContent")
+        self.processing_journey_content_layout = QVBoxLayout(
+            self.processing_journey_content
+        )
+        self.processing_journey_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.processing_journey_content_layout.setSpacing(12)
+        layout.addWidget(self.processing_journey_content)
+        layout.addStretch(1)
+        self.refresh_processing_journey()
+        self.add_page("journey", page)
+
+    @staticmethod
+    def _journey_source(function):
+        if function is None:
+            return "Implementation source is not available for this stage."
+        try:
+            return inspect.getsource(function)
+        except (OSError, TypeError):
+            return "Python source could not be retrieved in this runtime."
+
+    def record_processing_journey_step(
+        self, title, summary, *, stage="Completed", elapsed_ms=None,
+        formula="Not applicable", method="", parameters="", input_details="",
+        output_details="", measurements=None, code="", image=None
+    ):
+        """Append a factual record and optional actual output image for an executed operation."""
+        self.processing_journey_steps.append({
+            "title": str(title),
+            "summary": str(summary),
+            "stage": str(stage),
+            "elapsed_ms": elapsed_ms,
+            "formula": str(formula),
+            "method": str(method),
+            "parameters": str(parameters),
+            "input_details": str(input_details),
+            "output_details": str(output_details),
+            "measurements": measurements or {},
+            "code": str(code),
+            "image": image.copy() if isinstance(image, np.ndarray) and image.size else None,
+        })
+        self.refresh_processing_journey()
+
+    def refresh_processing_journey(self):
+        if not hasattr(self, "processing_journey_content_layout"):
+            return
+
+        content_layout = self.processing_journey_content_layout
+        while content_layout.count():
+            item = content_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if not self.processing_journey_steps:
+            empty = QGroupBox("No processing activity yet")
+            empty_layout = QVBoxLayout(empty)
+            message = QLabel(
+                "Upload or capture an image. ATHER will add the input, analysis, "
+                "enhancement and evaluation stages here as they actually happen."
+            )
+            message.setWordWrap(True)
+            message.setObjectName("muted")
+            empty_layout.addWidget(message)
+            content_layout.addWidget(empty)
+            self.journey_status_label.setText("Waiting for image input")
+            return
+
+        for index, step in enumerate(self.processing_journey_steps, start=1):
+            card = QFrame()
+            card.setObjectName("pageIntro")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(17, 14, 17, 15)
+            card_layout.setSpacing(8)
+
+            heading_row = QHBoxLayout()
+            number = QLabel(f"{index:02d}")
+            number.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            number.setFixedSize(38, 38)
+            number.setStyleSheet(
+                "background:#E9DFFF;color:#5B21B6;border:1px solid #CDB8F0;"
+                "border-radius:19px;font-weight:900;font-size:13px;"
+            )
+            heading = QLabel(step["title"])
+            heading.setStyleSheet("color:#32145F;font-size:15px;font-weight:850;")
+            status = QLabel(step["stage"])
+            status.setStyleSheet(
+                "color:#6D28D9;background:#F0E8FF;border:1px solid #D8C6F0;"
+                "border-radius:8px;padding:5px 8px;font-weight:750;"
+            )
+            heading_row.addWidget(number)
+            heading_row.addWidget(heading, 1)
+            heading_row.addWidget(status)
+            card_layout.addLayout(heading_row)
+
+            summary = QLabel(step["summary"])
+            summary.setWordWrap(True)
+            card_layout.addWidget(summary)
+
+            stage_image = step.get("image")
+            if isinstance(stage_image, np.ndarray) and stage_image.size:
+                image_heading = QLabel("Actual image at this stage")
+                image_heading.setStyleSheet(
+                    "color:#6D28D9;font-size:10px;font-weight:850;"
+                    "letter-spacing:1px;padding-top:3px;"
+                )
+                card_layout.addWidget(image_heading)
+                image_preview = QLabel()
+                image_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                image_preview.setMinimumHeight(170)
+                image_preview.setMaximumHeight(280)
+                image_preview.setStyleSheet(
+                    "background:#FBF9FF;border:1px solid #DED3F1;"
+                    "border-radius:9px;padding:6px;"
+                )
+                stage_pixmap = self.convert_to_pixmap(stage_image)
+                if stage_pixmap is not None and not stage_pixmap.isNull():
+                    image_preview.setPixmap(stage_pixmap.scaled(
+                        760, 260,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    ))
+                else:
+                    image_preview.setText("Image preview could not be created.")
+                card_layout.addWidget(image_preview)
+
+            if step.get("elapsed_ms") is not None:
+                timing = QLabel(f"Measured execution time: {float(step['elapsed_ms']):.3f} ms")
+                timing.setObjectName("muted")
+                card_layout.addWidget(timing)
+
+            details = QFrame()
+            details.setStyleSheet(
+                "QFrame{background:#FBF9FF;border:1px solid #E2D8F1;border-radius:9px;}"
+            )
+            details_layout = QVBoxLayout(details)
+            details_layout.setContentsMargins(12, 10, 12, 10)
+            details_layout.setSpacing(7)
+
+            detail_fields = [
+                ("Mathematical formula / rule", step.get("formula", "")),
+                ("Method", step.get("method", "")),
+                ("Parameters", step.get("parameters", "")),
+                ("Input", step.get("input_details", "")),
+                ("Output", step.get("output_details", "")),
+            ]
+            for label_text, value in detail_fields:
+                if value:
+                    label = QLabel(f"{label_text}: {value}")
+                    label.setWordWrap(True)
+                    details_layout.addWidget(label)
+
+            measurements = step.get("measurements") or {}
+            if measurements:
+                measure_lines = []
+                for key, value in measurements.items():
+                    if isinstance(value, float):
+                        rendered = f"{value:.5f}"
+                    else:
+                        rendered = str(value)
+                    measure_lines.append(f"{key.replace('_', ' ').title()}: {rendered}")
+                measure_label = QLabel("Measured values: " + "  |  ".join(measure_lines))
+                measure_label.setWordWrap(True)
+                details_layout.addWidget(measure_label)
+
+            code_box = QPlainTextEdit()
+            code_box.setReadOnly(True)
+            code_box.setPlainText(step.get("code") or "No source code recorded.")
+            code_box.setMinimumHeight(150)
+            code_box.setMaximumHeight(300)
+            details_layout.addWidget(code_box)
+            details.hide()
+
+            toggle = QPushButton("Show technical details and source code")
+            toggle.setObjectName("secondaryButton")
+            toggle.setCheckable(True)
+            toggle.toggled.connect(
+                lambda checked, panel=details, button=toggle:
+                (panel.setVisible(checked), button.setText(
+                    "Hide technical details" if checked else
+                    "Show technical details and source code"
+                ))
+            )
+            card_layout.addWidget(toggle)
+            card_layout.addWidget(details)
+            content_layout.addWidget(card)
+
+        content_layout.addStretch(1)
+        self.journey_status_label.setText(
+            f"{len(self.processing_journey_steps)} recorded stage(s) for the current image. "
+            "Times are measured where the underlying operation exposes a duration."
+        )
+
     @staticmethod
     def _format_evaluation_value(value):
         if value is None:
@@ -2049,6 +2315,87 @@ class ATHERApp(QMainWindow):
 
             self.processing_evaluation_result = result
             self.processing_evaluation_image = final_image.copy()
+
+            self.record_processing_journey_step(
+                "Processing components selected",
+                "The user selected the following components. The evaluation engine executes them in this exact order, passing each component's output to the next.",
+                formula="Sequential composition: I₀ = original image; Iₖ = fₖ(Iₖ₋₁) for each selected component k.",
+                method="User-controlled component selection; no component is automatically added by ACP.",
+                parameters="Execution order: " + " → ".join(selected),
+                input_details="The unchanged original image and the selected component list.",
+                output_details=f"A processing sequence containing {len(selected)} selected component(s).",
+                code=self._journey_source(evaluate_components)
+            )
+
+            component_function_map = {
+                "denoising": advanced_processing_module.classical_denoise,
+                "illumination": advanced_processing_module.illumination_correction,
+                "sharpening": advanced_processing_module.edge_preserving_sharpen,
+                "chroma_preservation": advanced_processing_module.preserve_original_chroma,
+            }
+            component_formula_map = {
+                "denoising": "Bilateral filtering: weighted neighbourhood averaging using spatial and intensity similarity.",
+                "illumination": "Estimate a smooth illumination field, then apply bounded luminance compensation.",
+                "sharpening": "Thresholded unsharp masking: sharpened = image + amount × (image − GaussianBlur(image)), subject to the implementation threshold.",
+                "chroma_preservation": "CIELAB colour processing: combine processed luminance with chroma derived from the original image.",
+            }
+            component_method_map = {
+                "denoising": "Bilateral filtering",
+                "illumination": "Gaussian illumination-field estimation and correction",
+                "sharpening": "Thresholded unsharp masking",
+                "chroma_preservation": "CIELAB original-chroma preservation",
+            }
+            for component_step in result.get("steps", []):
+                component_key = component_step.get("component", "unknown")
+                component_function = component_function_map.get(component_key)
+                component_metrics = component_step.get("metrics", {})
+                component_changes = component_step.get("changes_from_original", {})
+                measurements = {
+                    key: float(value) if isinstance(value, (int, float, np.integer, np.floating)) else value
+                    for key, value in component_metrics.items()
+                    if key in ("brightness", "contrast", "dynamic_range", "entropy", "sharpness", "noise_proxy")
+                }
+                if component_changes:
+                    measurements.update({
+                        f"change_{key}": float(value)
+                        for key, value in component_changes.items()
+                        if isinstance(value, (int, float, np.integer, np.floating))
+                    })
+                self.record_processing_journey_step(
+                    component_key.replace("_", " ").title(),
+                    f"The evaluation engine executed the {component_key.replace('_', ' ')} component in the recorded sequence.",
+                    elapsed_ms=float(component_step.get("processing_time_ms", 0.0)),
+                    formula=component_formula_map.get(component_key, "See the component implementation."),
+                    method=component_method_map.get(component_key, component_key),
+                    parameters="Default parameters were used; no custom parameter dictionary was supplied to evaluate_components.",
+                    input_details="The image produced by the preceding selected component (or the original image for the first component).",
+                    output_details="A copy of the image after this component; the evaluation engine also calculated per-step metrics.",
+                    measurements=measurements,
+                    code=self._journey_source(component_function),
+                    image=component_step.get("image")
+                )
+
+            total_component_time = float(result.get("total_processing_time_ms", 0.0))
+            final_metrics_for_journey = result.get("final_metrics", {})
+            self.record_processing_journey_step(
+                "Evaluated final output",
+                "ATHER completed the selected component sequence and measured the final image against the original. "
+                "These are descriptive no-reference measurements, not a universal quality score.",
+                elapsed_ms=total_component_time,
+                formula="Metric calculations are defined in core.processing_evaluation.calculate_image_metrics; changes are computed by compare_metrics.",
+                method=f"Processing evaluation engine v{EVALUATION_ENGINE_VERSION}",
+                parameters=f"Selected component order: {' → '.join(selected)}",
+                input_details=f"Original image: {self.original_image.shape}; final processed image: {final_image.shape}.",
+                output_details="Final image stored for preview and optional saving. PSNR/SSIM are not reported without a valid ground-truth reference image.",
+                measurements={
+                    key: float(value)
+                    for key, value in final_metrics_for_journey.items()
+                    if key in ("brightness", "contrast", "dynamic_range", "entropy", "sharpness", "noise_proxy")
+                    and isinstance(value, (int, float, np.integer, np.floating))
+                },
+                code=self._journey_source(evaluate_components),
+                image=final_image
+            )
             self.display_image(
                 self.processing_evaluation_image,
                 self.processing_evaluation_preview
@@ -2067,8 +2414,9 @@ class ATHERApp(QMainWindow):
                 ("Width (pixels)", "width"),
                 ("Height (pixels)", "height"),
                 ("Channels", "channels"),
-                ("Mean saturation", "saturation"),
-                ("Mean LAB chroma", "chroma"),
+                ("Mean saturation", "mean_saturation"),
+                ("Mean LAB a* chroma", "mean_chroma_a"),
+                ("Mean LAB b* chroma", "mean_chroma_b"),
             ]
             self.processing_metrics_table.setRowCount(len(metric_rows))
             for row, (label, key) in enumerate(metric_rows):
@@ -2708,6 +3056,8 @@ class ATHERApp(QMainWindow):
         self.enhanced_metrics = None
         self.benchmark_results = []
         self.last_report_path = None
+        self.processing_journey_steps = []
+        self.refresh_processing_journey()
 
         for label, message in [
             (self.original_label, "Upload an image to begin"),
@@ -3034,6 +3384,22 @@ class ATHERApp(QMainWindow):
         self.last_report_path = None
         self.processing_evaluation_result = None
         self.processing_evaluation_image = None
+        self.processing_journey_steps = []
+
+        # A new source image invalidates every ACP plan produced for the
+        # previous image. Require fresh analysis before photo validation.
+        self.acp_plan = None
+
+        if hasattr(self, "acp_status_label"):
+            self.acp_status_label.setText(
+                "Image changed. Run ACP analysis again for this photograph."
+            )
+            self.acp_recommendations_table.setRowCount(0)
+            self.acp_conditions_text.clear()
+            self.acp_cautions_text.clear()
+            self.acp_explanation_text.clear()
+            self.acp_validation_text.clear()
+            self.acp_open_method_button.setEnabled(False)
 
         if hasattr(self, "processing_evaluation_status"):
             self.processing_evaluation_status.setText(
@@ -3092,6 +3458,30 @@ class ATHERApp(QMainWindow):
 
         self.original_metrics = self.calculate_image_metrics(image)
         self.enhanced_metrics = None
+
+        height, width = image.shape[:2]
+        channels = 1 if image.ndim == 2 else image.shape[2]
+        filename = Path(path).name if path else "Webcam Captured Image"
+        self.record_processing_journey_step(
+            "Image input and validation",
+            "ATHER accepted the source image and stored an unchanged working copy. "
+            "The image is represented as a NumPy array for classical pixel processing.",
+            formula="Image data is decoded into an H × W (× C) uint8 array; no enhancement is applied here.",
+            method="OpenCV image decoding, input validation and NumPy array storage",
+            parameters=f"File: {filename}; data type: {image.dtype}; channels: {channels}",
+            input_details="Uploaded image file or captured camera frame.",
+            output_details=f"Validated image array: {width} × {height} pixels, {channels} channel(s).",
+            measurements={
+                "width_px": width,
+                "height_px": height,
+                "channels": channels,
+                "original_brightness": float(self.original_metrics.get("brightness", 0.0)),
+                "original_contrast": float(self.original_metrics.get("contrast", 0.0)),
+            },
+            code=self._journey_source(self.upload_image) + "\n\n" +
+                 self._journey_source(self.set_new_original_image),
+            image=self.original_image
+        )
 
         self.update_analysis_comparison()
 
@@ -3328,11 +3718,13 @@ class ATHERApp(QMainWindow):
 
             QApplication.processEvents()
 
+            algorithm_start = time.perf_counter()
             result = apply_enhancement(
                 key,
                 self.original_image.copy(),
                 gamma_value
             )
+            algorithm_elapsed_ms = (time.perf_counter() - algorithm_start) * 1000.0
 
             if result is None or result.size == 0:
                 raise ValueError(
@@ -3347,6 +3739,43 @@ class ATHERApp(QMainWindow):
             self.enhanced_image = result.copy()
             self.enhanced_metrics = self.calculate_image_metrics(
                 result
+            )
+
+            algorithm_details = ALGORITHMS[key]
+            algorithm_parameters = (
+                f"gamma={gamma_value:.3f}"
+                if key == "gamma" else
+                "Algorithm-specific defaults defined by the registered implementation; "
+                f"the GUI gamma value ({gamma_value:.3f}) is not used by this algorithm."
+            )
+            self.record_processing_journey_step(
+                algorithm_details.get("name", key),
+                algorithm_details.get("purpose", "The selected classical algorithm transformed the source pixel values."),
+                elapsed_ms=algorithm_elapsed_ms,
+                formula=algorithm_details.get("formula", "See implementation source."),
+                method=f"core.enhancement.{getattr(algorithm_details.get('function'), '__name__', key)}",
+                parameters=algorithm_parameters,
+                input_details=f"Original image array, shape {self.original_image.shape}, dtype {self.original_image.dtype}.",
+                output_details=f"Enhanced image array, shape {result.shape}, dtype {result.dtype}; output dimensions validated against the input.",
+                measurements={
+                    "output_mean_brightness": float(self.enhanced_metrics.get("brightness", 0.0)),
+                    "output_contrast": float(self.enhanced_metrics.get("contrast", 0.0)),
+                },
+                code=self._journey_source(algorithm_details.get("function")) + "\n\n" +
+                     self._journey_source(apply_enhancement)
+            )
+            self.record_processing_journey_step(
+                "Enhanced image ready",
+                "The algorithm returned a non-empty image with the same dimensions as the source. "
+                "ATHER stored the result for preview, comparison and saving.",
+                stage="Output prepared",
+                formula="The final output is the returned uint8 image array; no additional enhancement is implied.",
+                method="Output validation, in-memory copy and preview refresh",
+                input_details=f"Result from {algorithm_details.get('name', key)}.",
+                output_details=f"Ready-to-display enhanced image: {result.shape[1]} × {result.shape[0]} pixels.",
+                measurements={"processing_time_ms": float(algorithm_elapsed_ms)},
+                code=self._journey_source(self.perform_enhancement),
+                image=result
             )
 
             self.save_button.setEnabled(True)
