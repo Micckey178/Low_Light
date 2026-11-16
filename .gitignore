@@ -44,3 +44,11 @@ main_changes.txt
 .pytest_cache/
 .coverage
 htmlcov/
+
+# ATHER release packages and custom PyInstaller builds
+/ATHER_Release/
+/ATHER_Release_*.zip
+/build_final/
+/build_release_candidate/
+/dist_final/
+/dist_release_candidate/
