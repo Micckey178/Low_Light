@@ -31,7 +31,12 @@ class TestATHEREnhancement(unittest.TestCase):
             "gamma",
             "contrast_stretching",
             "histogram_equalization",
-            "clahe"
+            "clahe",
+            "adaptive_gamma",
+            "ssr",
+            "msr",
+            "lime",
+            "homomorphic"
         }
 
         self.assertEqual(
