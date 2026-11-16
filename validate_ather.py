@@ -24,6 +24,7 @@ import numpy as np
 from core.adaptive_engine import (
     ENGINE_VERSION as ACP_ENGINE_VERSION,
     build_processing_plan,
+    recommend_processing_components,
     validate_image,
 )
 from core.acp_validation import validate_real_image_plan
@@ -523,10 +524,90 @@ def run_phase3_2() -> int:
     return checks
 
 
+def run_phase4() -> int:
+    print("\n" + "=" * 72)
+    print("PHASE 4 - ACP-GUIDED CLASSICAL COMPONENT SELECTION")
+    print("=" * 72)
+
+    checks = 0
+
+    def check(name: str, condition: bool) -> None:
+        nonlocal checks
+        if not condition:
+            raise AssertionError(name)
+        print(f"PASS: {name}")
+        checks += 1
+
+    rng = np.random.default_rng(404)
+    noisy_dark = np.clip(34 + rng.normal(0, 22, (256, 256)), 0, 255).astype(np.uint8)
+    noisy_plan = build_processing_plan(noisy_dark)
+    noisy_guidance = recommend_processing_components(noisy_plan)
+    check(
+        "Elevated noise proxy recommends classical denoising",
+        "denoising" in noisy_guidance["recommended_components"],
+    )
+    check(
+        "Grayscale input does not receive chroma preservation",
+        "chroma_preservation" not in noisy_guidance["recommended_components"],
+    )
+
+    gradient = np.tile(
+        np.linspace(12, 170, 320, dtype=np.float32), (240, 1)
+    )
+    gradient += np.random.default_rng(405).normal(0, 2, gradient.shape)
+    uneven_gray = np.clip(gradient, 0, 255).astype(np.uint8)
+    uneven_bgr = np.repeat(uneven_gray[:, :, None], 3, axis=2)
+    uneven_plan = build_processing_plan(uneven_bgr)
+    uneven_guidance = recommend_processing_components(uneven_plan)
+    check(
+        "Uneven illumination recommends illumination correction",
+        "illumination" in uneven_guidance["recommended_components"],
+    )
+    check(
+        "Colour processing guidance adds original-chroma preservation",
+        "chroma_preservation" in uneven_guidance["recommended_components"],
+    )
+
+    bright = np.full((256, 256), 225, dtype=np.uint8)
+    bright_plan = build_processing_plan(bright)
+    bright_guidance = recommend_processing_components(bright_plan)
+    check(
+        "Bright grayscale scene receives no unnecessary component recommendation",
+        bright_guidance["recommended_components"] == [],
+    )
+
+    check(
+        "Sharpening remains manual because ACP has no direct blur measurement",
+        not uneven_guidance["component_guidance"]["sharpening"]["recommended"]
+        and "does not currently measure" in uneven_guidance["component_guidance"]["sharpening"]["reason"],
+    )
+    check(
+        "Component guidance never executes processing automatically",
+        noisy_guidance["automatic_execution"] is False
+        and uneven_guidance["automatic_execution"] is False,
+    )
+
+    repeated = recommend_processing_components(build_processing_plan(uneven_bgr.copy()))
+    check(
+        "Component guidance is deterministic",
+        repeated == uneven_guidance,
+    )
+
+    try:
+        recommend_processing_components(None)
+    except TypeError:
+        check("Invalid guidance input is rejected", True)
+    else:
+        raise AssertionError("Invalid guidance input was not rejected")
+
+    print(f"PHASE 4 PASSED ({checks} checks)")
+    return checks
+
+
 def main() -> int:
     print("=" * 72)
     print("ATHER - UNIFIED AUTOMATED VALIDATION")
-    print("Four phases | Synthetic images | No base photo required")
+    print("Five phases | Synthetic images | No base photo required")
     print("=" * 72)
 
     phases = [
@@ -534,6 +615,7 @@ def main() -> int:
         ("Phase 2 - ACP regression validation", run_phase2),
         ("Phase 3.1 - Classical processing", run_phase3_1),
         ("Phase 3.2 - Universal image evaluation", run_phase3_2),
+        ("Phase 4 - ACP-guided component selection", run_phase4),
     ]
 
     passed = []

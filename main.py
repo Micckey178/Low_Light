@@ -73,101 +73,117 @@ from core.acp_validation import validate_real_image_plan
 # =========================================================
 
 APP_STYLE = """
-/* ATHER Light Lavender — consistent application-wide theme */
+/* ATHER Vintage Red — warm parchment and burgundy research theme */
 QMainWindow, QWidget {
-    background: #F7F4FF;
-    color: #261542;
+    background: #F5EFE7;
+    color: #35251F;
     font-family: "Segoe UI";
     font-size: 13px;
 }
-QLabel { background: transparent; color: #302047; }
+QLabel { background: transparent; color: #3E3029; }
 QWidget#rootWidget, QWidget#mainColumn, QWidget#contentWidget,
-QWidget#pageStack { background: #F7F4FF; }
+QWidget#pageStack { background: #F5EFE7; }
 QFrame#sidebar {
-    background: #F1EBFC;
-    border-right: 1px solid #DED3F1;
+    background: #EDE2D5;
+    border-right: 1px solid #D8C8B9;
 }
 QFrame#brandPanel {
-    background: #FFFFFF;
-    border: 1px solid #E2D8F1;
+    background: #FFFCF7;
+    border: 1px solid #DED1C5;
     border-radius: 16px;
 }
 QLabel#brandMark {
-    background: #7C3AED; color: #FFFFFF;
-    border-radius: 12px; font-size: 23px; font-weight: 900;
+    background: #8F2635;
+    color: #FFFCF7;
+    border-radius: 11px;
+    font-size: 22px;
+    font-weight: 900;
+    padding: 0px;
 }
-QLabel#brand { color: #32145F; font-size: 22px; font-weight: 900; letter-spacing: 2px; }
-QLabel#brandSubtitle { color: #75658D; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
-QLabel#sidebarEyebrow { color: #8A79A3; font-size: 10px; font-weight: 850; letter-spacing: 1.5px; padding: 7px 9px; }
-QFrame#systemStatusPanel { background: #E9DFFF; border: 1px solid #D3C0F2; border-radius: 12px; }
-QLabel#statusEyebrow { color: #7656A0; font-size: 9px; font-weight: 850; letter-spacing: 1.1px; }
-QLabel#systemStatusText { color: #4C1D95; font-size: 12px; font-weight: 800; }
-QFrame#topbar { background: #FFFFFF; border: none; border-bottom: 1px solid #E4DCF1; }
-QLabel#topbarEyebrow { color: #8B5CF6; font-size: 9px; font-weight: 850; letter-spacing: 1.3px; }
-QLabel#topbarTitle { color: #281342; font-size: 18px; font-weight: 800; }
-QLabel#topbarStatus { color: #4C1D95; background: #F0E8FF; border: 1px solid #D8C6F0; border-radius: 10px; padding: 8px 12px; font-size: 10px; font-weight: 850; letter-spacing: .5px; }
-QFrame#pageIntro { background: #FFFFFF; border: 1px solid #E2D8F1; border-left: 4px solid #8B5CF6; border-radius: 14px; }
-QLabel#pageEyebrow { color: #8B5CF6; font-size: 9px; font-weight: 850; letter-spacing: 1.5px; }
-QLabel#pageTitle { color: #281342; font-size: 25px; font-weight: 850; }
-QLabel#pageSubtitle { color: #75658D; font-size: 12px; }
-QLabel#sectionTitle, QLabel#sectionLabel { color: #6D28D9; font-size: 11px; font-weight: 850; letter-spacing: 1px; }
-QLabel#muted { color: #75658D; }
-QLabel#statValue { color: #6D28D9; font-size: 28px; font-weight: 850; }
+QLabel#brand {
+    color: #61202A;
+    font-size: 19px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    padding: 0px;
+}
+QLabel#brandSubtitle {
+    color: #806D64;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    padding: 0px;
+}
+QLabel#sidebarEyebrow { color: #927E73; font-size: 10px; font-weight: 850; letter-spacing: 1.5px; padding: 7px 9px; }
+QFrame#systemStatusPanel { background: #F2E2DF; border: 1px solid #D9B9B4; border-radius: 12px; }
+QLabel#statusEyebrow { color: #8B4A50; font-size: 9px; font-weight: 850; letter-spacing: 1.1px; }
+QLabel#systemStatusText { color: #762532; font-size: 12px; font-weight: 800; }
+QFrame#topbar { background: #FFFCF7; border: none; border-bottom: 1px solid #E2D6CC; }
+QLabel#topbarEyebrow { color: #A33A45; font-size: 9px; font-weight: 850; letter-spacing: 1.3px; }
+QLabel#topbarTitle { color: #35251F; font-size: 18px; font-weight: 800; }
+QLabel#topbarStatus { color: #762532; background: #F4E7E3; border: 1px solid #DCC5BF; border-radius: 10px; padding: 8px 12px; font-size: 10px; font-weight: 850; letter-spacing: .5px; }
+QFrame#pageIntro { background: #FFFCF7; border: 1px solid #DED1C5; border-left: 4px solid #A33A45; border-radius: 14px; }
+QLabel#pageEyebrow { color: #A33A45; font-size: 9px; font-weight: 850; letter-spacing: 1.5px; }
+QLabel#pageTitle { color: #35251F; font-size: 25px; font-weight: 850; }
+QLabel#pageSubtitle { color: #806D64; font-size: 12px; }
+QLabel#sectionTitle, QLabel#sectionLabel { color: #8F2635; font-size: 11px; font-weight: 850; letter-spacing: 1px; }
+QLabel#muted { color: #806D64; }
+QLabel#statValue { color: #8F2635; font-size: 28px; font-weight: 850; }
 QPushButton {
-    background: #6D28D9; color: #FFFFFF; border: 1px solid #7C3AED;
+    background: #8F2635; color: #FFFCF7; border: 1px solid #8F2635;
     border-radius: 10px; padding: 10px 16px; min-height: 20px;
     font-size: 12px; font-weight: 750;
 }
-QPushButton:hover { background: #7C3AED; border-color: #A78BFA; }
-QPushButton:pressed { background: #5420B5; }
-QPushButton:disabled { background: #E7E0EF; color: #A69AB5; border-color: #DED5E9; }
-QPushButton#secondaryButton { background: #F3EEFC; color: #5B318F; border: 1px solid #D8C9EB; }
-QPushButton#secondaryButton:hover { background: #E9DFFF; color: #4C1D95; border-color: #A78BFA; }
+QPushButton:hover { background: #8F2635; border-color: #B85B62; }
+QPushButton:pressed { background: #6F1D2A; }
+QPushButton:disabled { background: #E9DED5; color: #A99B91; border-color: #E3D8CE; }
+QPushButton#secondaryButton { background: #F3E9DF; color: #762F38; border: 1px solid #DCCBC0; }
+QPushButton#secondaryButton:hover { background: #F2E2DF; color: #762532; border-color: #B85B62; }
 QPushButton#navButton {
-    background: transparent; color: #59466F; border: 1px solid transparent;
+    background: transparent; color: #66534B; border: 1px solid transparent;
     border-radius: 10px; text-align: left; padding: 13px 15px;
     min-height: 24px; font-size: 14px; font-weight: 650;
 }
-QPushButton#navButton:hover { background: #E9DFFF; color: #4C1D95; border-color: #D6C5F0; }
+QPushButton#navButton:hover { background: #F2E2DF; color: #762532; border-color: #E5CFCB; }
 QPushButton#navButton[active="true"] {
-    background: #DCCBFF; color: #4C1D95; border: 1px solid #B99BEF;
-    border-left: 4px solid #7C3AED; font-weight: 800;
+    background: #E9D2CE; color: #762532; border: 1px solid #C88B8B;
+    border-left: 4px solid #8F2635; font-weight: 800;
 }
 QGroupBox {
-    background: #FFFFFF; border: 1px solid #E2D8F1; border-radius: 14px;
+    background: #FFFCF7; border: 1px solid #DED1C5; border-radius: 14px;
     margin-top: 18px; padding: 17px 14px 13px 14px;
-    color: #4C1D95; font-size: 12px; font-weight: 800;
+    color: #762532; font-size: 12px; font-weight: 800;
 }
-QGroupBox::title { subcontrol-origin: margin; left: 13px; padding: 0 8px; color: #6D28D9; }
+QGroupBox::title { subcontrol-origin: margin; left: 13px; padding: 0 8px; color: #8F2635; }
 QComboBox, QDoubleSpinBox {
-    background: #FFFFFF; color: #302047; border: 1px solid #D8CBEA;
+    background: #FFFCF7; color: #3E3029; border: 1px solid #D8C6B8;
     border-radius: 8px; padding: 8px 10px; min-height: 25px;
-    selection-background-color: #7C3AED;
+    selection-background-color: #8F2635;
 }
-QComboBox:hover, QDoubleSpinBox:hover { border-color: #A78BFA; }
-QComboBox:focus, QDoubleSpinBox:focus { border: 1px solid #7C3AED; }
-QComboBox QAbstractItemView { background: #FFFFFF; color: #302047; selection-background-color: #E9DFFF; selection-color: #4C1D95; border: 1px solid #CBB8E8; padding: 5px; }
-QPlainTextEdit { background: #FBF9FF; color: #35244F; border: 1px solid #DED3F1; border-radius: 10px; padding: 11px; font-family: Consolas; font-size: 11px; selection-background-color: #DCCBFF; }
-QTableWidget { background: #FFFFFF; alternate-background-color: #F7F3FF; color: #302047; gridline-color: #E8E0F2; border: 1px solid #DED3F1; border-radius: 10px; selection-background-color: #E5D6FF; selection-color: #4C1D95; outline: 0; }
+QComboBox:hover, QDoubleSpinBox:hover { border-color: #B85B62; }
+QComboBox:focus, QDoubleSpinBox:focus { border: 1px solid #8F2635; }
+QComboBox QAbstractItemView { background: #FFFCF7; color: #3E3029; selection-background-color: #F2E2DF; selection-color: #762532; border: 1px solid #D8BDB7; padding: 5px; }
+QPlainTextEdit { background: #FAF5EE; color: #45352E; border: 1px solid #D8C8B9; border-radius: 10px; padding: 11px; font-family: Consolas; font-size: 11px; selection-background-color: #E9D2CE; }
+QTableWidget { background: #FFFCF7; alternate-background-color: #F7F1EA; color: #3E3029; gridline-color: #E7DCD2; border: 1px solid #D8C8B9; border-radius: 10px; selection-background-color: #EBD8D5; selection-color: #762532; outline: 0; }
 QTableWidget::item { padding: 8px 7px; }
-QTableWidget::item:selected { background: #E5D6FF; }
-QHeaderView::section { background: #F0E8FF; color: #4C1D95; padding: 10px 8px; font-weight: 800; border: none; border-right: 1px solid #E2D8F1; border-bottom: 1px solid #E2D8F1; }
-QCheckBox { color: #35244F; spacing: 9px; padding: 5px; }
+QTableWidget::item:selected { background: #EBD8D5; }
+QHeaderView::section { background: #F4E7E3; color: #762532; padding: 10px 8px; font-weight: 800; border: none; border-right: 1px solid #DED1C5; border-bottom: 1px solid #DED1C5; }
+QCheckBox { color: #45352E; spacing: 9px; padding: 5px; }
 QCheckBox::indicator { width: 17px; height: 17px; }
-QCheckBox::indicator:unchecked { background: #FFFFFF; border: 1px solid #B9A9CE; border-radius: 4px; }
-QCheckBox::indicator:checked { background: #7C3AED; border: 1px solid #6D28D9; border-radius: 4px; }
-QScrollArea { background: #F7F4FF; border: none; }
-QScrollArea > QWidget > QWidget { background: #F7F4FF; }
-QScrollBar:vertical { background: #EEE8F7; width: 11px; margin: 2px; border-radius: 5px; }
-QScrollBar::handle:vertical { background: #B9A0E8; min-height: 40px; border-radius: 5px; }
-QScrollBar::handle:vertical:hover { background: #8B5CF6; }
-QScrollBar:horizontal { background: #EEE8F7; height: 11px; margin: 2px; border-radius: 5px; }
-QScrollBar::handle:horizontal { background: #B9A0E8; min-width: 40px; border-radius: 5px; }
-QScrollBar::handle:horizontal:hover { background: #8B5CF6; }
+QCheckBox::indicator:unchecked { background: #FFFCF7; border: 1px solid #BCA99B; border-radius: 4px; }
+QCheckBox::indicator:checked { background: #8F2635; border: 1px solid #8F2635; border-radius: 4px; }
+QScrollArea { background: #F5EFE7; border: none; }
+QScrollArea > QWidget > QWidget { background: #F5EFE7; }
+QScrollBar:vertical { background: #EAE0D7; width: 11px; margin: 2px; border-radius: 5px; }
+QScrollBar::handle:vertical { background: #C9A6A0; min-height: 40px; border-radius: 5px; }
+QScrollBar::handle:vertical:hover { background: #A33A45; }
+QScrollBar:horizontal { background: #EAE0D7; height: 11px; margin: 2px; border-radius: 5px; }
+QScrollBar::handle:horizontal { background: #C9A6A0; min-width: 40px; border-radius: 5px; }
+QScrollBar::handle:horizontal:hover { background: #A33A45; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
-QDialog { background: #F7F4FF; }
-QToolTip { background: #35204F; color: #FFFFFF; border: 1px solid #A78BFA; padding: 7px 9px; border-radius: 6px; }
+QDialog { background: #F5EFE7; }
+QToolTip { background: #4A242B; color: #FFFCF7; border: 1px solid #B85B62; padding: 7px 9px; border-radius: 6px; }
 """
 
 
@@ -199,10 +215,10 @@ def make_section_label(text):
     label.setWordWrap(True)
     label.setStyleSheet("""
         QLabel#sectionLabel {
-            color: #4C1D95;
+            color: #762532;
             background: transparent;
             border: none;
-            border-left: 3px solid #A78BFA;
+            border-left: 3px solid #B85B62;
             padding: 3px 0 3px 10px;
             font-size: 11px;
             font-weight: 850;
@@ -218,13 +234,13 @@ def make_card(title, value, caption):
     card.setMinimumHeight(116)
     card.setStyleSheet("""
         QFrame#dashboardCard {
-            background: #FFFFFF;
-            border: 1px solid #E2D8F1;
+            background: #FFFCF7;
+            border: 1px solid #DED1C5;
             border-radius: 12px;
         }
         QFrame#dashboardCard:hover {
-            background: #F3EEFC;
-            border: 1px solid #A78BFA;
+            background: #F3E9DF;
+            border: 1px solid #B85B62;
         }
     """)
     layout = QVBoxLayout(card)
@@ -233,17 +249,17 @@ def make_card(title, value, caption):
 
     heading = QLabel(title.upper())
     heading.setStyleSheet(
-        "color: #8A79A3; font-size: 9px; font-weight: 850; "
+        "color: #927E73; font-size: 9px; font-weight: 850; "
         "letter-spacing: 1px; border: none;"
     )
     number = QLabel(value)
     number.setObjectName("statValue")
     number.setStyleSheet(
-        "color: #6D28D9; font-size: 27px; font-weight: 850; border: none;"
+        "color: #8F2635; font-size: 27px; font-weight: 850; border: none;"
     )
     description = QLabel(caption)
     description.setStyleSheet(
-        "color: #75658D; font-size: 9px; border: none;"
+        "color: #806D64; font-size: 9px; border: none;"
     )
     description.setWordWrap(True)
     layout.addWidget(heading)
@@ -260,9 +276,9 @@ def make_preview_label(text, minimum_height=230):
         QSizePolicy.Policy.Expanding
     )
     label.setStyleSheet("""
-        background: #FBF9FF;
-        color: #75658D;
-        border: 1px dashed #B9A0E8;
+        background: #FAF5EE;
+        color: #806D64;
+        border: 1px dashed #C9A6A0;
         border-radius: 10px;
         padding: 12px;
     """)
@@ -275,7 +291,7 @@ def make_preview_label(text, minimum_height=230):
 class HistogramCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None):
-        self.figure = Figure(figsize=(8, 3.2), facecolor="#FFFFFF")
+        self.figure = Figure(figsize=(8, 3.2), facecolor="#FFFCF7")
         self.ax = self.figure.add_subplot(111)
 
         super().__init__(self.figure)
@@ -288,15 +304,15 @@ class HistogramCanvas(FigureCanvasQTAgg):
         self.style_axes()
 
     def style_axes(self):
-        self.figure.patch.set_facecolor("#FFFFFF")
-        self.ax.set_facecolor("#FFFFFF")
-        self.ax.tick_params(colors="#75658D")
-        self.ax.xaxis.label.set_color("#75658D")
-        self.ax.yaxis.label.set_color("#75658D")
-        self.ax.title.set_color("#4C1D95")
+        self.figure.patch.set_facecolor("#FFFCF7")
+        self.ax.set_facecolor("#FFFCF7")
+        self.ax.tick_params(colors="#806D64")
+        self.ax.xaxis.label.set_color("#806D64")
+        self.ax.yaxis.label.set_color("#806D64")
+        self.ax.title.set_color("#762532")
 
         for spine in self.ax.spines.values():
-            spine.set_color("#E2D8F1")
+            spine.set_color("#DED1C5")
 
     def plot_histograms(self, image):
         self.ax.clear()
@@ -307,7 +323,7 @@ class HistogramCanvas(FigureCanvasQTAgg):
                 0.5, 0.5,
                 "Load or enhance an image to view its histogram",
                 ha="center", va="center",
-                color="#75658D",
+                color="#806D64",
                 transform=self.ax.transAxes,
                 fontsize=10
             )
@@ -315,7 +331,7 @@ class HistogramCanvas(FigureCanvasQTAgg):
             self.ax.set_yticks([])
             self.style_axes()
             self.figure.tight_layout()
-            self.draw()
+            self.draw_idle()
             return
 
         if image.ndim == 2:
@@ -323,14 +339,14 @@ class HistogramCanvas(FigureCanvasQTAgg):
                 image.ravel(),
                 bins=256,
                 range=(0, 256),
-                color="#8B5CF6",
+                color="#A33A45",
                 alpha=0.85
             )
             self.ax.set_title("Grayscale Intensity Distribution")
         else:
             for channel, color, label in zip(
                 cv2.split(image),
-                ("#8B5CF6", "#A78BFA", "#4C1D95"),
+                ("#A33A45", "#B85B62", "#762532"),
                 ("Blue", "Green", "Red")
             ):
                 self.ax.hist(
@@ -344,20 +360,20 @@ class HistogramCanvas(FigureCanvasQTAgg):
 
             self.ax.set_title("RGB Intensity Distribution")
             legend = self.ax.legend(
-                facecolor="#F3EEFC",
-                edgecolor="#E2D8F1"
+                facecolor="#F3E9DF",
+                edgecolor="#DED1C5"
             )
             for item in legend.get_texts():
-                item.set_color("#261542")
+                item.set_color("#35251F")
 
         self.ax.set_xlabel("Pixel Intensity")
         self.ax.set_ylabel("Number of Pixels")
         self.ax.set_xlim(0, 255)
-        self.ax.grid(alpha=0.15, color="#D8CBEA")
+        self.ax.grid(alpha=0.15, color="#D8C6B8")
 
         self.style_axes()
         self.figure.tight_layout()
-        self.draw()
+        self.draw_idle()
 
 
 # =========================================================
@@ -367,7 +383,7 @@ class HistogramCanvas(FigureCanvasQTAgg):
 class BenchmarkCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None):
-        self.figure = Figure(figsize=(9, 3.5), facecolor="#FFFFFF")
+        self.figure = Figure(figsize=(9, 3.5), facecolor="#FFFCF7")
         self.ax = self.figure.add_subplot(111)
 
         super().__init__(self.figure)
@@ -380,15 +396,15 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
         self.style_axes()
 
     def style_axes(self):
-        self.figure.patch.set_facecolor("#FFFFFF")
-        self.ax.set_facecolor("#FFFFFF")
-        self.ax.tick_params(colors="#75658D")
-        self.ax.xaxis.label.set_color("#75658D")
-        self.ax.yaxis.label.set_color("#75658D")
-        self.ax.title.set_color("#4C1D95")
+        self.figure.patch.set_facecolor("#FFFCF7")
+        self.ax.set_facecolor("#FFFCF7")
+        self.ax.tick_params(colors="#806D64")
+        self.ax.xaxis.label.set_color("#806D64")
+        self.ax.yaxis.label.set_color("#806D64")
+        self.ax.title.set_color("#762532")
 
         for spine in self.ax.spines.values():
-            spine.set_color("#E2D8F1")
+            spine.set_color("#DED1C5")
 
     def plot_results(self, results, metric, title, ylabel):
         self.ax.clear()
@@ -397,7 +413,7 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
             self.ax.set_title(title)
             self.style_axes()
             self.figure.tight_layout()
-            self.draw()
+            self.draw_idle()
             return
 
         names = [result["algorithm_name"] for result in results]
@@ -412,8 +428,8 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
         bars = self.ax.bar(
             names,
             values,
-            color="#6D28D9",
-            edgecolor="#A78BFA",
+            color="#8F2635",
+            edgecolor="#B85B62",
             linewidth=0.7
         )
 
@@ -430,12 +446,12 @@ class BenchmarkCanvas(FigureCanvasQTAgg):
                 ha="center",
                 va="bottom",
                 fontsize=7,
-                color="#261542"
+                color="#35251F"
             )
 
         self.style_axes()
         self.figure.tight_layout()
-        self.draw()
+        self.draw_idle()
 
 
 # =========================================================
@@ -475,6 +491,7 @@ class ATHERApp(QMainWindow):
 
         self.camera_timer = QTimer(self)
         self.camera_timer.timeout.connect(self.update_camera_frame)
+        self.camera_timer.setInterval(50)  # 20 FPS keeps webcam preview responsive with lower UI overhead.
 
         self.setStyleSheet(APP_STYLE)
 
@@ -541,52 +558,95 @@ class ATHERApp(QMainWindow):
     # =====================================================
 
     def setup_ui(self):
-        """Build the persistent ATHER workstation shell."""
+        """Build the persistent ATHER workstation shell with protected status."""
         root = QWidget()
         root.setObjectName("rootWidget")
+
         root_layout = QHBoxLayout(root)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
         self.setCentralWidget(root)
 
-        # Compact, persistent navigation rail
+        # Sidebar shell
         self.sidebar = QFrame()
         self.sidebar.setObjectName("sidebar")
         self.sidebar.setFixedWidth(264)
+
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(16, 20, 16, 16)
-        sidebar_layout.setSpacing(6)
+        sidebar_layout.setSpacing(10)
 
+        # Brand panel
         brand_panel = QFrame()
         brand_panel.setObjectName("brandPanel")
-        brand_layout = QVBoxLayout(brand_panel)
-        brand_layout.setContentsMargins(15, 16, 15, 15)
-        brand_layout.setSpacing(4)
+        brand_panel.setFixedHeight(76)
+
+        brand_layout = QHBoxLayout(brand_panel)
+        brand_layout.setContentsMargins(12, 8, 12, 8)
+        brand_layout.setSpacing(12)
 
         brand_mark = QLabel("A")
         brand_mark.setObjectName("brandMark")
         brand_mark.setFixedSize(42, 42)
         brand_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand_mark.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+        )
+
         brand = QLabel("ATHER")
         brand.setObjectName("brand")
+        brand.setMinimumHeight(27)
+        brand.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        brand.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+
         brand_subtitle = QLabel("CLASSICAL IMAGE LAB")
         brand_subtitle.setObjectName("brandSubtitle")
+        brand_subtitle.setMinimumHeight(16)
+        brand_subtitle.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        brand_subtitle.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
 
-        brand_row = QHBoxLayout()
-        brand_row.setSpacing(10)
-        brand_row.addWidget(brand_mark)
         brand_text = QVBoxLayout()
-        brand_text.setSpacing(1)
+        brand_text.setContentsMargins(0, 0, 0, 0)
+        brand_text.setSpacing(0)
         brand_text.addWidget(brand)
         brand_text.addWidget(brand_subtitle)
-        brand_row.addLayout(brand_text, 1)
-        brand_layout.addLayout(brand_row)
+
+        brand_layout.addWidget(brand_mark, 0, Qt.AlignmentFlag.AlignVCenter)
+        brand_layout.addLayout(brand_text, 1)
         sidebar_layout.addWidget(brand_panel)
-        sidebar_layout.addSpacing(20)
+
+        # Scrollable navigation. The status card remains outside this area.
+        self.sidebar_scroll = QScrollArea()
+        self.sidebar_scroll.setObjectName("sidebarNavScroll")
+        self.sidebar_scroll.setWidgetResizable(True)
+        self.sidebar_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.sidebar_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.sidebar_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.sidebar_scroll.setMinimumHeight(0)
+
+        navigation_content = QWidget()
+        navigation_content.setObjectName("sidebarNavigationContent")
+        navigation_content.setMinimumWidth(0)
+
+        navigation_layout = QVBoxLayout(navigation_content)
+        navigation_layout.setContentsMargins(0, 8, 0, 8)
+        navigation_layout.setSpacing(6)
 
         menu_label = QLabel("YOUR WORKSPACE")
         menu_label.setObjectName("sidebarEyebrow")
-        sidebar_layout.addWidget(menu_label)
+        navigation_layout.addWidget(menu_label)
 
         navigation_items = [
             ("Dashboard", "dashboard"),
@@ -600,6 +660,7 @@ class ATHERApp(QMainWindow):
             ("Research Reports", "reports"),
         ]
         self.navigation_buttons = {}
+
         for title, key in navigation_items:
             button = QPushButton(title)
             button.setObjectName("navButton")
@@ -608,15 +669,17 @@ class ATHERApp(QMainWindow):
             button.setMinimumHeight(52)
             button.setCheckable(False)
             button.clicked.connect(
-                lambda checked=False, destination=key: self.navigate(destination)
+                lambda checked=False, destination=key:
+                self.navigate(destination)
             )
-            sidebar_layout.addWidget(button)
+            navigation_layout.addWidget(button)
             self.navigation_buttons[key] = button
 
-        sidebar_layout.addSpacing(14)
+        navigation_layout.addSpacing(14)
+
         preference_label = QLabel("PREFERENCES")
         preference_label.setObjectName("sidebarEyebrow")
-        sidebar_layout.addWidget(preference_label)
+        navigation_layout.addWidget(preference_label)
 
         settings_button = QPushButton("Settings")
         settings_button.setObjectName("navButton")
@@ -624,46 +687,71 @@ class ATHERApp(QMainWindow):
         settings_button.setMinimumHeight(52)
         settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_button.clicked.connect(lambda: self.navigate("settings"))
-        sidebar_layout.addWidget(settings_button)
+        navigation_layout.addWidget(settings_button)
         self.navigation_buttons["settings"] = settings_button
+        navigation_layout.addStretch(1)
 
-        sidebar_layout.addStretch(1)
+        self.sidebar_scroll.setWidget(navigation_content)
+        sidebar_layout.addWidget(self.sidebar_scroll, 1)
 
+        # Workspace status is pinned below navigation and cannot be compressed
+        # to the point where its heading or current status becomes clipped.
         status_panel = QFrame()
         status_panel.setObjectName("systemStatusPanel")
+        status_panel.setMinimumHeight(88)
+        status_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+
         status_layout = QVBoxLayout(status_panel)
         status_layout.setContentsMargins(12, 12, 12, 12)
-        status_layout.setSpacing(5)
+        status_layout.setSpacing(6)
+
         status_heading = QLabel("WORKSPACE STATUS")
         status_heading.setObjectName("statusEyebrow")
+        status_heading.setMinimumHeight(14)
+
         self.sidebar_status = QLabel("●  SYSTEM READY")
         self.sidebar_status.setObjectName("systemStatusText")
         self.sidebar_status.setWordWrap(True)
+        self.sidebar_status.setMinimumHeight(32)
+        self.sidebar_status.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.sidebar_status.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+
         status_layout.addWidget(status_heading)
         status_layout.addWidget(self.sidebar_status)
         sidebar_layout.addWidget(status_panel)
 
         root_layout.addWidget(self.sidebar)
 
-        # Main column: persistent top bar + scrollable page stack
+        # Main column: persistent top bar and page stack
         self.main_column = QWidget()
         self.main_column.setObjectName("mainColumn")
+
         main_layout = QVBoxLayout(self.main_column)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
         self.topbar = QFrame()
         self.topbar.setObjectName("topbar")
+
         topbar_layout = QHBoxLayout(self.topbar)
         topbar_layout.setContentsMargins(28, 14, 30, 14)
         topbar_layout.setSpacing(12)
 
         title_column = QVBoxLayout()
         title_column.setSpacing(2)
+
         self.topbar_eyebrow = QLabel("ATHER  /  RESEARCH WORKSPACE")
         self.topbar_eyebrow.setObjectName("topbarEyebrow")
+
         self.topbar_title = QLabel("Dashboard")
         self.topbar_title.setObjectName("topbarTitle")
+
         title_column.addWidget(self.topbar_eyebrow)
         title_column.addWidget(self.topbar_title)
         topbar_layout.addLayout(title_column, 1)
@@ -681,6 +769,7 @@ class ATHERApp(QMainWindow):
         main_layout.addWidget(self.page_stack, 1)
         root_layout.addWidget(self.main_column, 1)
 
+        # Build all existing application pages without changing their content.
         self.build_dashboard()
         self.build_workspace()
         self.build_enhancement_lab()
@@ -749,9 +838,9 @@ class ATHERApp(QMainWindow):
         hero.setObjectName("dashboardHero")
         hero.setStyleSheet("""
             QFrame#dashboardHero {
-                background-color: #FFFFFF;
-                border: 1px solid #D8CBEA;
-                border-left: 5px solid #8B5CF6;
+                background-color: #FFFCF7;
+                border: 1px solid #D8C6B8;
+                border-left: 5px solid #A33A45;
                 border-radius: 15px;
             }
         """)
@@ -764,7 +853,7 @@ class ATHERApp(QMainWindow):
             "Classical Image Enhancement Laboratory"
         )
         hero_title.setStyleSheet(
-            "color: #261542; font-size: 22px; font-weight: 850; "
+            "color: #35251F; font-size: 22px; font-weight: 850; "
             "border: none;"
         )
         hero_title.setWordWrap(True)
@@ -776,7 +865,7 @@ class ATHERApp(QMainWindow):
             "for detailed analysis, benchmarking and reporting."
         )
         hero_description.setStyleSheet(
-            "color: #75658D; font-size: 12px; border: none;"
+            "color: #806D64; font-size: 12px; border: none;"
         )
         hero_description.setWordWrap(True)
 
@@ -784,7 +873,7 @@ class ATHERApp(QMainWindow):
             "CLASSICAL IMAGE PROCESSING  •  CPU-BASED  •  NO AI / ML"
         )
         hero_note.setStyleSheet(
-            "color: #6D28D9; font-size: 10px; font-weight: 800; "
+            "color: #8F2635; font-size: 10px; font-weight: 800; "
             "letter-spacing: 1px; border: none;"
         )
 
@@ -842,7 +931,7 @@ class ATHERApp(QMainWindow):
         )
         dashboard_description.setWordWrap(True)
         dashboard_description.setStyleSheet(
-            "color: #75658D; font-size: 11px;"
+            "color: #806D64; font-size: 11px;"
         )
         dashboard_lab_layout.addWidget(dashboard_description)
 
@@ -996,7 +1085,7 @@ class ATHERApp(QMainWindow):
         )
         self.dashboard_method_information.setWordWrap(True)
         self.dashboard_method_information.setStyleSheet(
-            "color: #75658D; font-size: 11px;"
+            "color: #806D64; font-size: 11px;"
         )
         dashboard_lab_layout.addWidget(
             self.dashboard_method_information
@@ -1016,7 +1105,7 @@ class ATHERApp(QMainWindow):
 
         self.dashboard_current_image = QLabel("No image loaded")
         self.dashboard_current_image.setStyleSheet(
-            "color: #4C1D95; font-weight: 600;"
+            "color: #762532; font-weight: 600;"
         )
         self.dashboard_current_image.setWordWrap(True)
         session_layout.addWidget(
@@ -1031,7 +1120,7 @@ class ATHERApp(QMainWindow):
             "Waiting for input"
         )
         self.dashboard_processing_state.setStyleSheet(
-            "color: #6D28D9; font-weight: 600;"
+            "color: #8F2635; font-weight: 600;"
         )
         session_layout.addWidget(
             self.dashboard_processing_state, 1, 1
@@ -1043,7 +1132,7 @@ class ATHERApp(QMainWindow):
 
         self.dashboard_image_dimensions = QLabel("Not available")
         self.dashboard_image_dimensions.setStyleSheet(
-            "color: #4C1D95; font-weight: 600;"
+            "color: #762532; font-weight: 600;"
         )
         session_layout.addWidget(
             self.dashboard_image_dimensions, 2, 1
@@ -1085,8 +1174,8 @@ class ATHERApp(QMainWindow):
             step_card = QFrame()
             step_card.setStyleSheet("""
                 QFrame {
-                    background-color: #F3EEFC;
-                    border: 1px solid #E2D8F1;
+                    background-color: #F3E9DF;
+                    border: 1px solid #DED1C5;
                     border-radius: 9px;
                 }
             """)
@@ -1097,7 +1186,7 @@ class ATHERApp(QMainWindow):
 
             step_heading = QLabel(heading)
             step_heading.setStyleSheet(
-                "color: #4C1D95; font-weight: 800; "
+                "color: #762532; font-weight: 800; "
                 "font-size: 11px; border: none;"
             )
 
@@ -1105,7 +1194,7 @@ class ATHERApp(QMainWindow):
             step_description.setWordWrap(True)
             step_description.setMinimumHeight(42)
             step_description.setStyleSheet(
-                "color: #75658D; font-size: 11px; border: none;"
+                "color: #806D64; font-size: 11px; border: none;"
             )
 
             step_button = QPushButton(button_text)
@@ -1347,14 +1436,14 @@ class ATHERApp(QMainWindow):
             "ORIGINAL: Waiting for image"
         )
         self.analysis_original_status.setStyleSheet(
-            "color: #6D28D9; font-weight: 700;"
+            "color: #8F2635; font-weight: 700;"
         )
 
         self.analysis_enhanced_status = QLabel(
             "ENHANCED: No enhanced output"
         )
         self.analysis_enhanced_status.setStyleSheet(
-            "color: #75658D; font-weight: 700;"
+            "color: #806D64; font-weight: 700;"
         )
 
         status_layout.addWidget(self.analysis_original_status)
@@ -1374,7 +1463,7 @@ class ATHERApp(QMainWindow):
         )
         metrics_description.setWordWrap(True)
         metrics_description.setStyleSheet(
-            "color: #75658D; font-size: 11px;"
+            "color: #806D64; font-size: 11px;"
         )
         metrics_layout.addWidget(metrics_description)
 
@@ -1521,7 +1610,7 @@ class ATHERApp(QMainWindow):
         )
         self.acp_status_label.setWordWrap(True)
         self.acp_status_label.setStyleSheet(
-            "color: #8B5CF6; font-weight: 700; padding: 5px 0;"
+            "color: #A33A45; font-weight: 700; padding: 5px 0;"
         )
         layout.addWidget(self.acp_status_label)
 
@@ -2147,14 +2236,14 @@ class ATHERApp(QMainWindow):
             number.setAlignment(Qt.AlignmentFlag.AlignCenter)
             number.setFixedSize(38, 38)
             number.setStyleSheet(
-                "background:#E9DFFF;color:#5B21B6;border:1px solid #CDB8F0;"
+                "background:#F2E2DF;color:#762532;border:1px solid #D9B9B4;"
                 "border-radius:19px;font-weight:900;font-size:13px;"
             )
             heading = QLabel(step["title"])
-            heading.setStyleSheet("color:#32145F;font-size:15px;font-weight:850;")
+            heading.setStyleSheet("color:#61202A;font-size:15px;font-weight:850;")
             status = QLabel(step["stage"])
             status.setStyleSheet(
-                "color:#6D28D9;background:#F0E8FF;border:1px solid #D8C6F0;"
+                "color:#8F2635;background:#F4E7E3;border:1px solid #DCC5BF;"
                 "border-radius:8px;padding:5px 8px;font-weight:750;"
             )
             heading_row.addWidget(number)
@@ -2170,7 +2259,7 @@ class ATHERApp(QMainWindow):
             if isinstance(stage_image, np.ndarray) and stage_image.size:
                 image_heading = QLabel("Actual image at this stage")
                 image_heading.setStyleSheet(
-                    "color:#6D28D9;font-size:10px;font-weight:850;"
+                    "color:#8F2635;font-size:10px;font-weight:850;"
                     "letter-spacing:1px;padding-top:3px;"
                 )
                 card_layout.addWidget(image_heading)
@@ -2179,7 +2268,7 @@ class ATHERApp(QMainWindow):
                 image_preview.setMinimumHeight(170)
                 image_preview.setMaximumHeight(280)
                 image_preview.setStyleSheet(
-                    "background:#FBF9FF;border:1px solid #DED3F1;"
+                    "background:#FAF5EE;border:1px solid #D8C8B9;"
                     "border-radius:9px;padding:6px;"
                 )
                 stage_pixmap = self.convert_to_pixmap(stage_image)
@@ -2200,7 +2289,7 @@ class ATHERApp(QMainWindow):
 
             details = QFrame()
             details.setStyleSheet(
-                "QFrame{background:#FBF9FF;border:1px solid #E2D8F1;border-radius:9px;}"
+                "QFrame{background:#FAF5EE;border:1px solid #DED1C5;border-radius:9px;}"
             )
             details_layout = QVBoxLayout(details)
             details_layout.setContentsMargins(12, 10, 12, 10)
@@ -2791,7 +2880,7 @@ class ATHERApp(QMainWindow):
             "algorithms. Only checked algorithms will be included."
         )
         description.setWordWrap(True)
-        description.setStyleSheet("color: #75658D;")
+        description.setStyleSheet("color: #806D64;")
         selection_layout.addWidget(description)
 
         selection_buttons = QHBoxLayout()
@@ -2832,7 +2921,7 @@ class ATHERApp(QMainWindow):
             "Selected algorithms: 0"
         )
         self.report_selection_count.setStyleSheet(
-            "color: #4C1D95; font-weight: bold;"
+            "color: #762532; font-weight: bold;"
         )
         selection_layout.addWidget(self.report_selection_count)
 
@@ -2919,11 +3008,11 @@ class ATHERApp(QMainWindow):
 
         if not selected:
             self.report_selection_count.setStyleSheet(
-                "color: #F59E9B; font-weight: bold;"
+                "color: #C97878; font-weight: bold;"
             )
         else:
             self.report_selection_count.setStyleSheet(
-                "color: #4C1D95; font-weight: bold;"
+                "color: #762532; font-weight: bold;"
             )
 
         can_generate = bool(self.benchmark_results) and bool(selected)
@@ -3278,34 +3367,63 @@ class ATHERApp(QMainWindow):
         return QPixmap.fromImage(q_image)
 
     def display_image(self, image, target_label):
+        """Render only the pixels needed by the visible preview widget.
+
+        The source NumPy image is never modified. Full-resolution arrays remain
+        available to every enhancement, metric, benchmark and report routine.
+        """
         if image is None:
             return
 
-        pixmap = self.convert_to_pixmap(image)
+        available_size = target_label.contentsRect().size()
+        target_width = available_size.width()
+        target_height = available_size.height()
+        if target_width <= 0 or target_height <= 0:
+            return
 
+        source_height, source_width = image.shape[:2]
+        scale = min(target_width / source_width, target_height / source_height, 1.0)
+
+        # Downsample before colour conversion. This avoids converting millions
+        # of pixels when the on-screen preview is only a few hundred pixels wide.
+        if scale < 1.0:
+            preview_width = max(1, int(source_width * scale))
+            preview_height = max(1, int(source_height * scale))
+            preview_image = cv2.resize(
+                image,
+                (preview_width, preview_height),
+                interpolation=cv2.INTER_AREA
+            )
+        else:
+            preview_image = image
+
+        pixmap = self.convert_to_pixmap(preview_image)
         if pixmap is None:
             return
 
-        available_size = target_label.contentsRect().size()
-
-        if available_size.width() <= 0 or available_size.height() <= 0:
-            return
-
-        scaled_pixmap = pixmap.scaled(
-            available_size,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
-
-        target_label.setPixmap(scaled_pixmap)
+        target_label.setPixmap(pixmap)
 
     def refresh_previews(self):
-        preview_pairs = [
-            (self.original_image, self.original_label),
-            (self.enhanced_image, self.enhanced_label),
-            (self.original_image, self.dashboard_original_label),
-            (self.enhanced_image, self.dashboard_enhanced_label)
-        ]
+        """Refresh only the two previews on the currently visible page."""
+        if not hasattr(self, "page_stack"):
+            return
+
+        current_index = self.page_stack.currentIndex()
+        dashboard_index = self.page_indices.get("dashboard", -1)
+        workspace_index = self.page_indices.get("workspace", -1)
+
+        if current_index == dashboard_index:
+            preview_pairs = (
+                (self.original_image, self.dashboard_original_label),
+                (self.enhanced_image, self.dashboard_enhanced_label),
+            )
+        elif current_index == workspace_index:
+            preview_pairs = (
+                (self.original_image, self.original_label),
+                (self.enhanced_image, self.enhanced_label),
+            )
+        else:
+            return
 
         for image, label in preview_pairs:
             if image is not None:
@@ -4234,8 +4352,11 @@ class ATHERApp(QMainWindow):
         success, frame = self.camera.read()
 
         if success:
-            self.display_image(frame, self.original_label)
-            self.display_image(frame, self.dashboard_original_label)
+            current_index = self.page_stack.currentIndex()
+            if current_index == self.page_indices.get("dashboard"):
+                self.display_image(frame, self.dashboard_original_label)
+            elif current_index == self.page_indices.get("workspace"):
+                self.display_image(frame, self.original_label)
 
     def capture_camera_image(self):
         if self.camera is None:

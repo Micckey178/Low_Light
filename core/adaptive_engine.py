@@ -702,3 +702,94 @@ def build_processing_plan(
         "explanation": explanation,
     }
 
+
+
+
+def recommend_processing_components(plan: dict[str, Any]) -> dict[str, Any]:
+    """Map measured ACP conditions to conservative Phase 3.1 components.
+
+    This function only creates reviewable guidance. It never executes image
+    processing and does not infer conditions that ACP did not measure.
+    """
+    if not isinstance(plan, dict):
+        raise TypeError("plan must be a processing-plan dictionary.")
+
+    classification = plan.get("classification")
+    analysis = plan.get("analysis")
+    if not isinstance(classification, dict) or not isinstance(analysis, dict):
+        raise ValueError("plan must contain ACP analysis and classification dictionaries.")
+
+    active = set(classification.get("active_conditions", []))
+    image_info = analysis.get("image", {})
+    color_mode = image_info.get("color_mode", "unknown")
+    is_bgr_color = color_mode == "BGR"
+    bright_dominant = "bright_dominant_scene" in active
+
+    guidance = {
+        "denoising": {
+            "recommended": "high_noise_proxy" in active,
+            "reason": (
+                "ACP measured an elevated high-frequency residual noise proxy. "
+                "Conservative bilateral denoising is therefore worth evaluating."
+                if "high_noise_proxy" in active else
+                "ACP did not detect an elevated noise proxy; denoising is left to manual choice."
+            ),
+        },
+        "illumination": {
+            "recommended": (
+                "uneven_illumination" in active and not bright_dominant
+            ),
+            "reason": (
+                "ACP measured spatially uneven low-frequency illumination. "
+                "Evaluate illumination-field correction while inspecting highlights."
+                if "uneven_illumination" in active and not bright_dominant else
+                "ACP did not identify a suitable uneven-illumination condition. "
+                "Global darkness alone is not treated as proof that this component is needed."
+            ),
+        },
+        "sharpening": {
+            "recommended": False,
+            "reason": (
+                "ACP does not currently measure edge sharpness or blur directly. "
+                "It therefore makes no automatic sharpening recommendation; test it manually if needed."
+            ),
+        },
+        "chroma_preservation": {
+            "recommended": False,
+            "reason": (
+                "Original-chroma preservation is useful after a selected luminance-processing "
+                "component on a BGR colour image."
+            ),
+        },
+    }
+
+    tonal_components = [
+        key for key in ("denoising", "illumination", "sharpening")
+        if guidance[key]["recommended"]
+    ]
+    if is_bgr_color and tonal_components:
+        guidance["chroma_preservation"]["recommended"] = True
+        guidance["chroma_preservation"]["reason"] = (
+            "A colour image has at least one recommended processing component. "
+            "Apply original-chroma preservation last to retain the source chroma."
+        )
+    elif not is_bgr_color:
+        guidance["chroma_preservation"]["reason"] = (
+            "The current ACP image profile is not a three-channel BGR colour image; "
+            "the Phase 3.1 chroma component is not recommended for this input."
+        )
+
+    recommended = [
+        key for key in ("denoising", "illumination", "sharpening", "chroma_preservation")
+        if guidance[key]["recommended"]
+    ]
+
+    return {
+        "engine_version": ENGINE_VERSION,
+        "mapping_method": "deterministic ACP-condition-to-classical-component rules",
+        "automatic_execution": False,
+        "recommended_components": recommended,
+        "component_guidance": guidance,
+        "source_active_conditions": sorted(active),
+        "image_color_mode": color_mode,
+    }
